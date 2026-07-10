@@ -28,7 +28,7 @@ export function CourseDetailPage() {
   if (isLoading) {
     return (
       <CourseWorkspaceLayout
-        sidebar={<Skeleton className="h-full w-64 shrink-0 rounded-lg" />}
+        sidebar={<Skeleton className="hidden h-full w-full rounded-lg lg:block lg:w-64" />}
       >
         <div className="flex flex-col gap-4">
           <Skeleton className="h-10 w-1/2" />
@@ -57,13 +57,13 @@ export function CourseDetailPage() {
 
   return (
     <CourseWorkspaceLayout sidebar={<CourseSidebar course={course} />}>
-        <div className="mb-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="mb-4 sm:mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{course.topic}</h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{course.topic}</h1>
               <p className="mt-1 text-sm text-muted-foreground">{course.goal}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {levelLabel ? <Badge>{levelLabel}</Badge> : null}
               {course.language && (
                 <Badge variant="secondary" className="flex items-center gap-1">
@@ -81,9 +81,9 @@ export function CourseDetailPage() {
         </div>
 
         <Tabs defaultValue="overview">
-          <TabsList>
-            <TabsTrigger value="overview">{t('course.overview')}</TabsTrigger>
-            <TabsTrigger value="progress">{t('course.progress')}</TabsTrigger>
+          <TabsList className="w-full sm:w-fit">
+            <TabsTrigger value="overview" className="flex-1 sm:flex-none">{t('course.overview')}</TabsTrigger>
+            <TabsTrigger value="progress" className="flex-1 sm:flex-none">{t('course.progress')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-4 flex flex-col gap-4">
@@ -103,7 +103,7 @@ export function CourseDetailPage() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-muted-foreground flex items-center gap-1.5">
@@ -190,9 +190,9 @@ export function CourseDetailPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                   {progress.weak_topics.map((wt) => (
-                    <div key={wt.subtopic} className="flex items-center justify-between text-sm">
-                      <span className="text-foreground">{wt.subtopic}</span>
-                      <Badge variant="secondary">{Math.round(wt.average_score * 100)}%</Badge>
+                    <div key={wt.subtopic} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-foreground">{wt.subtopic}</span>
+                      <Badge variant="secondary" className="shrink-0">{Math.round(wt.average_score * 100)}%</Badge>
                     </div>
                   ))}
                 </CardContent>

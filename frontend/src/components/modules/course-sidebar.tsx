@@ -63,7 +63,7 @@ export function CourseSidebar({ course }: CourseSidebarProps) {
   const isCoursePage = pathname === coursePath
 
   return (
-    <aside className="flex h-full min-h-0 w-64 shrink-0 flex-col gap-2">
+    <aside className="flex h-full min-h-0 w-full flex-col gap-2 lg:w-64 lg:shrink-0">
       <div className="shrink-0 px-2 py-1">
         {isCoursePage ? (
           <p className="text-xs font-semibold uppercase tracking-widest text-foreground">

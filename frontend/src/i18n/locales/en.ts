@@ -4,6 +4,11 @@ export default {
     newCourse: '+ New course',
     settings: 'Settings',
     logout: 'Log out',
+    menu: 'Menu',
+    openMenu: 'Open menu',
+    closeMenu: 'Close menu',
+    themeLabel: 'Theme',
+    language: 'Language',
     theme: {
       light: 'Switch to light mode',
       dark: 'Switch to dark mode',
@@ -78,6 +83,8 @@ export default {
 
   sidebar: {
     curriculum: 'Curriculum',
+    openCurriculum: 'Open curriculum',
+    closeCurriculum: 'Close curriculum',
     lesson: 'Lesson',
     quiz: 'Quiz',
     finalTest: 'Final test',
@@ -164,6 +171,12 @@ export default {
     loading: 'Loading…',
     cancel: 'Cancel',
     backToCourse: 'Back to course',
+  },
+
+  notFound: {
+    title: 'Page not found',
+    description: 'The page you are looking for does not exist or may have been moved.',
+    cta: 'Go to courses',
   },
 
   settings: {

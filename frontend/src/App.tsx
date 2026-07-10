@@ -10,6 +10,7 @@ import { LessonPage } from '@/pages/lesson-page'
 import { QuizPage } from '@/pages/quiz-page'
 import { FinalTestPage } from '@/pages/final-test-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { NotFoundPage } from '@/pages/not-found-page'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/courses/:courseId/subtopics/:subtopicId/lesson" element={<LessonPage />} />
               <Route path="/courses/:courseId/subtopics/:subtopicId/quiz" element={<QuizPage />} />
               <Route path="/courses/:courseId/modules/:moduleId/final-test" element={<FinalTestPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

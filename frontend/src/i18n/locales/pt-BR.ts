@@ -4,6 +4,11 @@ export default {
     newCourse: '+ Novo curso',
     settings: 'Configurações',
     logout: 'Sair',
+    menu: 'Menu',
+    openMenu: 'Abrir menu',
+    closeMenu: 'Fechar menu',
+    themeLabel: 'Tema',
+    language: 'Idioma',
     theme: {
       light: 'Mudar para modo claro',
       dark: 'Mudar para modo escuro',
@@ -78,6 +83,8 @@ export default {
 
   sidebar: {
     curriculum: 'Currículo',
+    openCurriculum: 'Abrir currículo',
+    closeCurriculum: 'Fechar currículo',
     lesson: 'Aula',
     quiz: 'Quiz',
     finalTest: 'Teste final',
@@ -164,6 +171,12 @@ export default {
     loading: 'Carregando…',
     cancel: 'Cancelar',
     backToCourse: 'Voltar ao curso',
+  },
+
+  notFound: {
+    title: 'Página não encontrada',
+    description: 'A página que você procura não existe ou foi movida.',
+    cta: 'Ir para os cursos',
   },
 
   settings: {

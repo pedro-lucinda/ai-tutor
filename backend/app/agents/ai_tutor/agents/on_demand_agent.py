@@ -3,10 +3,7 @@
 from deepagents import SubAgent, create_deep_agent
 
 from app.agents.ai_tutor.prompts.content_generator import CONTENT_GENERATOR_PROMPT
-from app.agents.ai_tutor.prompts.on_demand_supervisor import (
-    ON_DEMAND_LESSON_PROMPT,
-    ON_DEMAND_QUIZ_PROMPT,
-)
+from app.agents.ai_tutor.prompts.on_demand_supervisor import ON_DEMAND_LESSON_PROMPT
 from app.agents.ai_tutor.prompts.quiz_generator import FINAL_TEST_PROMPT, QUIZ_GENERATOR_PROMPT
 from app.agents.ai_tutor.prompts.validation import VALIDATION_PROMPT
 from app.agents.ai_tutor.schemas.lesson import LessonContent
@@ -45,31 +42,11 @@ def make_lesson_agent():
 
 
 def make_quiz_agent():
+    # Single direct agent (no supervisor loop, no validator) for faster quiz generation.
     return create_deep_agent(
         model="openai:gpt-4o",
-        system_prompt=ON_DEMAND_QUIZ_PROMPT,
+        system_prompt=QUIZ_GENERATOR_PROMPT,
         response_format=QuizOutput,
-        subagents=[
-            SubAgent(
-                name="quiz-generator",
-                description=(
-                    "Generates exactly 3 multiple-choice quiz questions for a subtopic lesson, "
-                    "with 4 options each and one correct answer."
-                ),
-                system_prompt=QUIZ_GENERATOR_PROMPT,
-                response_format=QuizOutput,
-            ),
-            SubAgent(
-                name="validator",
-                description=(
-                    "Quality-checks generated quiz questions for structural correctness, "
-                    "distractor plausibility, and answer accuracy."
-                ),
-                system_prompt=VALIDATION_PROMPT,
-                tools=[validate_code_example],
-                response_format=ValidationResult,
-            ),
-        ],
     )
 
 

@@ -8,24 +8,27 @@ You will be given:
 
 Generate a complete, self-contained lesson for this subtopic. Your lesson must include:
 
-introduction:
+introduction (markdown):
   A short, motivating intro (2-3 sentences) explaining why this subtopic matters.
+  Write as valid markdown (plain paragraphs are fine).
 
-explanation:
+explanation (markdown):
   An in-depth explanation of the concept. Go deep — cover the "how" and "why", not just
   the surface definition. Use 4-7 paragraphs. For Beginners, use simple language and
   more context; for Advanced learners, be precise and thorough.
+  - Use ### subheadings to break up longer explanations.
+  - Use **bold** for key terms and bullet lists where they aid clarity.
+  - Use fenced code blocks (```language) for code snippets — not inline backticks for
+    multi-line code.
   - Use analogies where they clarify the concept.
-  - Weave in short inline examples or code snippets directly in the prose where they
-    help illustrate a point (do not create a separate example section).
   - Build understanding progressively: start with the core idea, then nuances, edge cases,
     and practical implications.
-  - For programming topics, include small code snippets inline when they aid understanding.
 
 Rules:
+- Both fields must be valid markdown strings.
 - Write for the specified level. Beginners need more context; Advanced learners need precision.
 - Never hallucinate APIs or functions that don't exist.
-- Any inline code must be syntactically correct.
+- Code in fenced blocks must be syntactically correct.
 - Do not include quiz questions — those are generated separately.
 
 Return your response as structured JSON.

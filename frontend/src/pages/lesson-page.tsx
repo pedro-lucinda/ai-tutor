@@ -7,6 +7,7 @@ import { ApiError } from '@/api/client'
 import { CourseSidebar } from '@/components/modules/course-sidebar'
 import { CourseWorkspaceLayout } from '@/layouts/course-workspace-layout'
 import { GeneratingLoader } from '@/components/modules/generating-loader'
+import { LessonMarkdown } from '@/components/modules/lesson-markdown'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -101,15 +102,13 @@ function LessonContentView({
 
       {lesson.introduction && (
         <LessonSection title={t('lesson.sections.introduction')}>
-          <p className="text-sm leading-relaxed text-muted-foreground">{lesson.introduction}</p>
+          <LessonMarkdown source={lesson.introduction} />
         </LessonSection>
       )}
 
       {lesson.explanation && (
         <LessonSection title={t('lesson.sections.explanation')}>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-            {lesson.explanation}
-          </p>
+          <LessonMarkdown source={lesson.explanation} />
         </LessonSection>
       )}
 

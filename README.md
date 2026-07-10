@@ -327,13 +327,70 @@ Lessons, quizzes, and final tests are generated once per subtopic/module and sto
 
 ---
 
+## Authentication and BYOK
+
+The platform uses **Auth0** for authentication and **Bring Your Own Key (BYOK)** for OpenAI inference:
+
+1. Users sign in via Auth0 (SPA + JWT access tokens).
+2. The FastAPI backend validates JWTs on every protected route.
+3. Each user stores their own OpenAI API key (encrypted at rest with AES-256-GCM).
+4. DeepAgents runs use the authenticated user's decrypted key per request.
+
+### Required environment variables
+
+**Backend** (`backend/.env`):
+
+| Variable | Description |
+| --- | --- |
+| `AUTH0_DOMAIN` | Auth0 tenant domain |
+| `AUTH0_AUDIENCE` | API identifier (e.g. `sporter/api`) |
+| `AUTH0_ISSUER` | Issuer URL (e.g. `https://{domain}/`) |
+| `APP_ENCRYPTION_KEY` | 32-byte key, base64-encoded — encrypts user OpenAI keys |
+| `CORS_ORIGINS` | Comma-separated frontend origins (no `*` with credentials) |
+| `TAVILY_API_KEY` | Platform key for curriculum web search |
+
+**Frontend** (`frontend/.env`):
+
+| Variable | Description |
+| --- | --- |
+| `VITE_AUTH0_DOMAIN` | Same Auth0 domain |
+| `VITE_AUTH0_CLIENT_ID` | SPA client ID |
+| `VITE_AUTH0_AUDIENCE` | Same API audience |
+
+Generate an encryption key:
+
+```bash
+python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+```
+
+### Auth0 dashboard setup
+
+- Create an API with identifier matching `AUTH0_AUDIENCE`
+- SPA application: add callback/logout URLs and web origins for your frontend
+- Enable RBAC only if you plan to use roles later
+
+### User-owned data
+
+Courses are scoped to `user_id`. Existing courses without an owner have a nullable `user_id` — backfill manually:
+
+```sql
+UPDATE courses SET user_id = <your_user_id> WHERE user_id IS NULL;
+```
+
+### Encryption key rotation
+
+To rotate `APP_ENCRYPTION_KEY`, decrypt all keys with the old key and re-encrypt with the new key before switching the env var. Plan a maintenance window for this operation.
+
+---
+
 ## Quick start
 
-**Prerequisites:** Docker, `OPENAI_API_KEY`, `TAVILY_API_KEY`
+**Prerequisites:** Docker, Auth0 tenant, `TAVILY_API_KEY`, user OpenAI keys (BYOK)
 
 ```bash
 # Copy env files
-cp backend/.env.example backend/.env   # fill in API keys
+cp backend/.env.example backend/.env   # fill in Auth0, encryption key, Tavily
+cp frontend/.env.example frontend/.env # fill in Auth0 SPA vars
 cp .env.example .env                   # root keys for compose interpolation
 
 # Start everything
@@ -346,7 +403,7 @@ docker compose up --build
 | Backend API | http://localhost:8000 |
 | API docs | http://localhost:8000/docs |
 
-Enter a learning goal on the home page to trigger the course creation supervisor. Open any subtopic to trigger on-demand lesson generation with streaming.
+Enter a learning goal on the home page to trigger the course creation supervisor. Add your OpenAI API key in **Settings** before generating content. Open any subtopic to trigger on-demand lesson generation with streaming.
 
 For local (non-Docker) backend setup, env vars, and Render deployment, see [backend/README.md](backend/README.md).
 
@@ -356,6 +413,7 @@ For local (non-Docker) backend setup, env vars, and Render deployment, see [back
 
 | Layer | Stack |
 | --- | --- |
+| Auth | Auth0 (JWT), per-user encrypted OpenAI keys |
 | Agents | DeepAgents 0.6+, LangGraph, LangChain OpenAI |
 | Backend | FastAPI, SQLAlchemy (async), Alembic, PostgreSQL |
 | Frontend | React, TypeScript, Vite, react-markdown |

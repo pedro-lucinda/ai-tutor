@@ -14,7 +14,95 @@ from app.agents.ai_tutor.schemas import (
     QuizOutput,
     ValidationResult,
 )
-from app.db.models import Course, Lesson, Module, Progress, Quiz, QuizAttempt, Subtopic
+from app.db.models import Course, Lesson, Module, Progress, Quiz, QuizAttempt, Subtopic, User, UserApiKey
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+
+async def get_user_by_auth0_id(db: AsyncSession, auth0_user_id: str) -> User | None:
+    result = await db.execute(select(User).where(User.auth0_user_id == auth0_user_id))
+    return result.scalar_one_or_none()
+
+
+async def upsert_user_from_auth0(
+    db: AsyncSession,
+    *,
+    auth0_user_id: str,
+    email: str | None,
+    name: str | None,
+    picture: str | None,
+) -> User:
+    now = datetime.now(timezone.utc)
+    user = await get_user_by_auth0_id(db, auth0_user_id)
+    if user:
+        user.email = email
+        user.name = name
+        user.picture = picture
+        user.last_login = now
+    else:
+        user = User(
+            auth0_user_id=auth0_user_id,
+            email=email,
+            name=name,
+            picture=picture,
+            created_at=now,
+            last_login=now,
+        )
+        db.add(user)
+    await db.flush()
+    return user
+
+
+async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# API keys
+# ---------------------------------------------------------------------------
+
+
+async def get_user_api_key(db: AsyncSession, user_id: int) -> UserApiKey | None:
+    result = await db.execute(select(UserApiKey).where(UserApiKey.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def upsert_user_api_key(
+    db: AsyncSession,
+    user_id: int,
+    encrypted_key: bytes,
+    key_last4: str,
+) -> UserApiKey:
+    now = datetime.now(timezone.utc)
+    record = await get_user_api_key(db, user_id)
+    if record:
+        record.encrypted_key = encrypted_key
+        record.key_last4 = key_last4
+        record.updated_at = now
+    else:
+        record = UserApiKey(
+            user_id=user_id,
+            encrypted_key=encrypted_key,
+            key_last4=key_last4,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(record)
+    await db.flush()
+    return record
+
+
+async def delete_user_api_key(db: AsyncSession, user_id: int) -> bool:
+    record = await get_user_api_key(db, user_id)
+    if not record:
+        return False
+    await db.delete(record)
+    await db.flush()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -22,7 +110,12 @@ from app.db.models import Course, Lesson, Module, Progress, Quiz, QuizAttempt, S
 # ---------------------------------------------------------------------------
 
 
-async def create_course(db: AsyncSession, plan: LearningPlanOutput, language: str = "en") -> Course:
+async def create_course(
+    db: AsyncSession,
+    plan: LearningPlanOutput,
+    language: str = "en",
+    user_id: int | None = None,
+) -> Course:
     course = Course(
         topic=plan.topic,
         level=plan.level,
@@ -30,6 +123,7 @@ async def create_course(db: AsyncSession, plan: LearningPlanOutput, language: st
         estimated_hours=plan.estimated_hours,
         status="building",
         language=language,
+        user_id=user_id,
     )
     db.add(course)
     await db.flush()
@@ -43,25 +137,38 @@ async def set_course_ready(db: AsyncSession, course_id: int) -> None:
         course.status = "ready"
 
 
-async def get_course(db: AsyncSession, course_id: int) -> Course | None:
+async def get_course(db: AsyncSession, course_id: int, user_id: int | None = None) -> Course | None:
     # Use select() instead of db.get() so that selectinload options are always
     # applied — db.get() may return a cached identity-map object and skip the
     # eager-load query, causing MissingGreenlet errors on async engines.
-    result = await db.execute(
+    query = (
         select(Course)
         .where(Course.id == course_id)
         .options(selectinload(Course.modules).selectinload(Module.subtopics))
     )
+    if user_id is not None:
+        query = query.where(Course.user_id == user_id)
+    result = await db.execute(query)
     return result.scalar_one_or_none()
 
 
-async def list_courses(db: AsyncSession) -> list[Course]:
-    result = await db.execute(select(Course).order_by(Course.created_at.desc()))
+async def get_owned_course(db: AsyncSession, course_id: int, user_id: int) -> Course | None:
+    return await get_course(db, course_id, user_id=user_id)
+
+
+async def list_courses(db: AsyncSession, user_id: int) -> list[Course]:
+    result = await db.execute(
+        select(Course)
+        .where(Course.user_id == user_id)
+        .order_by(Course.created_at.desc())
+    )
     return list(result.scalars().all())
 
 
-async def delete_course(db: AsyncSession, course_id: int) -> bool:
-    result = await db.execute(select(Course).where(Course.id == course_id))
+async def delete_course(db: AsyncSession, course_id: int, user_id: int) -> bool:
+    result = await db.execute(
+        select(Course).where(Course.id == course_id, Course.user_id == user_id)
+    )
     course = result.scalar_one_or_none()
     if not course:
         return False

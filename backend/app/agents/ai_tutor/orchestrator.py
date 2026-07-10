@@ -8,6 +8,8 @@ from typing import AsyncIterator
 
 from langchain_core.messages import HumanMessage
 
+from langchain_openai import ChatOpenAI
+
 from deepagents import SubAgent, create_deep_agent
 
 from app.agents.ai_tutor.streaming import stream_agent
@@ -36,9 +38,10 @@ def _language_instruction(lang: str) -> str:
     return f"\n\nIMPORTANT: Write ALL output in {name}. Every field, name, and description must be in {name}."
 
 
-def _make_course_creation_agent():
+def make_course_creation_agent(api_key: str):
+    model = ChatOpenAI(model="gpt-4o", api_key=api_key)
     return create_deep_agent(
-        model="openai:gpt-4o",
+        model=model,
         system_prompt=COURSE_CREATION_SUPERVISOR_PROMPT,
         response_format=CourseCreationOutput,
         subagents=[
@@ -83,13 +86,13 @@ def _make_course_creation_agent():
     )
 
 
-async def run_course_creation(user_goal: str, lang: str = "en") -> CourseCreationOutput:
+async def run_course_creation(user_goal: str, api_key: str, lang: str = "en") -> CourseCreationOutput:
     """Run the full course-creation pipeline and return a CourseCreationOutput.
 
     Persistence (saving to DB) is handled by the caller (course_service.py)
     to keep this module framework-agnostic.
     """
-    agent = _make_course_creation_agent()
+    agent = make_course_creation_agent(api_key)
     result = await agent.ainvoke({
         "messages": [HumanMessage(content=user_goal + _language_instruction(lang))]
     })
@@ -99,6 +102,7 @@ async def run_course_creation(user_goal: str, lang: str = "en") -> CourseCreatio
 
 async def run_course_creation_stream(
     user_goal: str,
+    api_key: str,
     lang: str = "en",
 ) -> AsyncIterator[tuple[str, CourseCreationOutput | None]]:
     """Streaming variant of run_course_creation.
@@ -107,7 +111,7 @@ async def run_course_creation_stream(
     (complete_sse_line, CourseCreationOutput) as the final tuple so the
     caller (course_service) can persist the result to the DB.
     """
-    agent = _make_course_creation_agent()
+    agent = make_course_creation_agent(api_key)
     agent_input = {"messages": [HumanMessage(content=user_goal + _language_instruction(lang))]}
 
     async for sse_line, output in stream_agent(agent, agent_input):

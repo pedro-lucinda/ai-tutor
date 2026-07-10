@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { getAgentLabel, filterVisibleAgentSteps } from '@/lib/agent-label'
 import type { LessonContent } from '@/types/api'
 
 function LessonSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -34,11 +35,18 @@ function AgentStepList({
 }) {
   const { t } = useTranslation()
 
-  if (steps.length === 0) return null
+  const visibleSteps = filterVisibleAgentSteps(steps)
+  const visibleCurrentAgent =
+    currentAgent && getAgentLabel(currentAgent, t) ? currentAgent : null
+
+  if (visibleSteps.length === 0 && !visibleCurrentAgent) return null
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
-      {steps.map((step) => (
+      {visibleSteps.map((step) => {
+        const label = getAgentLabel(step.agent, t)
+        if (!label) return null
+        return (
         <div key={step.agent} className="flex items-center gap-2 text-sm">
           {step.status === 'done' ? (
             <CheckCircle2 className="size-4 shrink-0 text-green-500" />
@@ -52,15 +60,17 @@ function AgentStepList({
                 : 'font-medium text-foreground'
             }
           >
-            {t(`agents.${step.agent}`, { defaultValue: step.agent })}
+            {label}
           </span>
         </div>
-      ))}
-      {currentAgent && !steps.some((s) => s.agent === currentAgent && s.status === 'running') && (
+        )
+      })}
+      {visibleCurrentAgent &&
+        !visibleSteps.some((s) => s.agent === visibleCurrentAgent && s.status === 'running') && (
         <div className="flex items-center gap-2 text-sm">
           <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
           <span className="font-medium text-foreground">
-            {t(`agents.${currentAgent}`, { defaultValue: currentAgent })}
+            {getAgentLabel(visibleCurrentAgent, t)}
           </span>
         </div>
       )}
@@ -98,7 +108,7 @@ function LessonContentView({
         <Separator className="mt-3" />
       </div>
 
-      {steps && <AgentStepList steps={steps} currentAgent={currentAgent ?? null} />}
+      {steps && steps.length > 0 ? <AgentStepList steps={steps} currentAgent={currentAgent ?? null} /> : null}
 
       {lesson.introduction && (
         <LessonSection title={t('lesson.sections.introduction')}>

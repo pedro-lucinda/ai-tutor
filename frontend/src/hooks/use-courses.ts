@@ -2,21 +2,28 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteCourse, getCourse, getFinalTest, getLesson, getQuiz, listCourses } from '@/api/courses'
 import { getProgress } from '@/api/progress'
+import { useAuthUser } from '@/components/auth/app-auth-provider'
 import type { AgentStreamEvent } from '@/types/api'
 
 const STALE_CONTENT = 1000 * 60 * 60 // 1 h — avoid re-triggering agent generation
 
 export function useCourses() {
-  return useQuery({ queryKey: ['courses'], queryFn: listCourses })
+  const { sub } = useAuthUser()
+  return useQuery({
+    queryKey: ['courses', sub],
+    queryFn: listCourses,
+    enabled: !!sub,
+  })
 }
 
 export function useDeleteCourse() {
   const queryClient = useQueryClient()
+  const { sub } = useAuthUser()
 
   return useMutation({
     mutationFn: deleteCourse,
     onSuccess: (_data, courseId) => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['courses', sub] })
       queryClient.removeQueries({ queryKey: ['course', courseId] })
       queryClient.removeQueries({ queryKey: ['progress', courseId] })
     },
@@ -38,7 +45,6 @@ export function useLesson(
 ) {
   const { data: course } = useCourse(courseId)
   const lang = course?.language ?? 'en'
-  // Use a ref so react-query doesn't re-run when the callback identity changes
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
 

@@ -3,7 +3,7 @@
 import json
 from typing import AsyncIterator, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +14,11 @@ from app.agents.ai_tutor.services.course_service import (
     get_or_generate_lesson_stream,
     get_or_generate_quiz_stream,
 )
+from app.auth import CurrentUser, get_current_user
 from app.db.engine import get_db
 from app.db import repository as repo
+from app.limiter import limiter
+from app.services.errors import ApiKeyNotFoundError
 
 courses_router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -40,23 +43,49 @@ def _sse_stream(generator: AsyncIterator[str]) -> StreamingResponse:
     return StreamingResponse(generator, media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
+async def _require_owned_course(
+    db: AsyncSession,
+    course_id: int,
+    current_user: CurrentUser,
+):
+    course = await repo.get_owned_course(db, course_id, current_user.id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return course
+
+
+def _map_api_key_error(exc: ApiKeyNotFoundError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc) or "Please add your OpenAI API key.")
+
+
 # ---------------------------------------------------------------------------
 # Course endpoints
 # ---------------------------------------------------------------------------
 
 
 @courses_router.post("")
+@limiter.limit("3/hour")
 async def create_course_endpoint(
-    request: CreateCourseRequest,
+    request: Request,
+    body: CreateCourseRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Run the full course-creation pipeline — always streams SSE events."""
-    return _sse_stream(create_course_stream(db, request.goal, lang=request.lang))
+    try:
+        return _sse_stream(
+            create_course_stream(db, current_user.id, body.goal, lang=body.lang)
+        )
+    except ApiKeyNotFoundError as exc:
+        raise _map_api_key_error(exc) from exc
 
 
 @courses_router.get("")
-async def list_courses_endpoint(db: AsyncSession = Depends(get_db)):
-    courses = await repo.list_courses(db)
+async def list_courses_endpoint(
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    courses = await repo.list_courses(db, current_user.id)
     return [
         {"id": c.id, "topic": c.topic, "level": c.level, "status": c.status}
         for c in courses
@@ -64,10 +93,12 @@ async def list_courses_endpoint(db: AsyncSession = Depends(get_db)):
 
 
 @courses_router.get("/{course_id}")
-async def get_course_endpoint(course_id: int, db: AsyncSession = Depends(get_db)):
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+async def get_course_endpoint(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    course = await _require_owned_course(db, course_id, current_user)
     return {
         "id": course.id,
         "topic": course.topic,
@@ -99,8 +130,12 @@ async def get_course_endpoint(course_id: int, db: AsyncSession = Depends(get_db)
 
 
 @courses_router.delete("/{course_id}", status_code=204)
-async def delete_course_endpoint(course_id: int, db: AsyncSession = Depends(get_db)):
-    deleted = await repo.delete_course(db, course_id)
+async def delete_course_endpoint(
+    course_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    deleted = await repo.delete_course(db, course_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Course not found")
     await db.commit()
@@ -117,11 +152,10 @@ async def get_or_generate_lesson_endpoint(
     subtopic_id: int,
     lang: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Return the lesson for a subtopic; streams progress when generating."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    course = await _require_owned_course(db, course_id, current_user)
 
     subtopic = await repo.get_subtopic(db, subtopic_id)
     if not subtopic:
@@ -134,9 +168,14 @@ async def get_or_generate_lesson_endpoint(
         return json.loads(existing.content_json)
 
     resolved_lang = _resolve_lang(course.language, lang)
-    return _sse_stream(
-        get_or_generate_lesson_stream(db, subtopic, course.level, lang=resolved_lang)
-    )
+    try:
+        return _sse_stream(
+            get_or_generate_lesson_stream(
+                db, current_user.id, subtopic, course.level, lang=resolved_lang
+            )
+        )
+    except ApiKeyNotFoundError as exc:
+        raise _map_api_key_error(exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -150,11 +189,10 @@ async def get_or_generate_quiz_endpoint(
     subtopic_id: int,
     lang: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Return the quiz for a subtopic; streams progress when generating."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    course = await _require_owned_course(db, course_id, current_user)
 
     subtopic = await repo.get_subtopic(db, subtopic_id)
     if not subtopic:
@@ -170,9 +208,19 @@ async def get_or_generate_quiz_endpoint(
     lesson_json = lesson.content_json if lesson else None
 
     resolved_lang = _resolve_lang(course.language, lang)
-    return _sse_stream(
-        get_or_generate_quiz_stream(db, subtopic, course.level, lesson_json, lang=resolved_lang)
-    )
+    try:
+        return _sse_stream(
+            get_or_generate_quiz_stream(
+                db,
+                current_user.id,
+                subtopic,
+                course.level,
+                lesson_json,
+                lang=resolved_lang,
+            )
+        )
+    except ApiKeyNotFoundError as exc:
+        raise _map_api_key_error(exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -186,11 +234,10 @@ async def get_or_generate_final_test_endpoint(
     module_id: int,
     lang: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Return the final test for a module; streams progress when generating."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    course = await _require_owned_course(db, course_id, current_user)
 
     module = next((m for m in course.modules if m.id == module_id), None)
     if not module:
@@ -209,14 +256,18 @@ async def get_or_generate_final_test_endpoint(
     ]
 
     resolved_lang = _resolve_lang(course.language, lang)
-    return _sse_stream(
-        generate_final_test_stream(
-            db=db,
-            module_id=module_id,
-            course_level=course.level,
-            module_name=module.name,
-            subtopics=module.subtopics,
-            weak_topic_names=weak_names,
-            lang=resolved_lang,
+    try:
+        return _sse_stream(
+            generate_final_test_stream(
+                db=db,
+                user_id=current_user.id,
+                module_id=module_id,
+                course_level=course.level,
+                module_name=module.name,
+                subtopics=module.subtopics,
+                weak_topic_names=weak_names,
+                lang=resolved_lang,
+            )
         )
-    )
+    except ApiKeyNotFoundError as exc:
+        raise _map_api_key_error(exc) from exc

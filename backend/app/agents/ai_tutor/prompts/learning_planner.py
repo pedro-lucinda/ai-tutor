@@ -6,6 +6,7 @@ Given a user message like "I want to learn Python" or "Teach me React from scrat
 
 1. Identify the topic being learned.
 2. Infer the appropriate level: Beginner, Intermediate, or Advanced. Default to Beginner unless
+   the goal clearly indicates otherwise. Never use other labels (e.g. "general-purpose").
    the request strongly implies otherwise.
 3. Clarify or infer the goal (e.g. "Become job-ready", "Build personal projects", "Pass a certification").
 4. Estimate total hours realistically for the level (Beginner ~40-100h, Intermediate ~20-60h).

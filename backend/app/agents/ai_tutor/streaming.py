@@ -19,11 +19,20 @@ def format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-def _get_agent_name_from_task_event(data: dict) -> str:
+def _get_agent_name_from_task_event(data: dict) -> str | None:
     tool_input = data.get("input") or {}
     if isinstance(tool_input, dict):
-        return tool_input.get("subagent_type") or ""
-    return ""
+        agent_name = tool_input.get("subagent_type") or ""
+    else:
+        agent_name = ""
+    agent_name = agent_name.strip()
+    if not agent_name or agent_name in _HIDDEN_AGENT_NAMES:
+        return None
+    return agent_name
+
+
+# Internal DeepAgents/LangGraph runtime names — not user-facing.
+_HIDDEN_AGENT_NAMES = frozenset({"general-purpose"})
 
 
 def map_langgraph_event(event: dict) -> dict | None:

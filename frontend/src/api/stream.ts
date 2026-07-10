@@ -1,24 +1,34 @@
 /**
  * SSE consumer that works for both GET and POST requests.
- *
- * When the server responds with `application/json` (cache hit), returns the
- * parsed JSON directly without SSE parsing.
- *
- * When the server responds with `text/event-stream`, parses `data: {...}\n\n`
- * lines, calls `onEvent` for each event, and resolves when a `complete` event
- * arrives (returning `complete.data`) or rejects on an `error` event.
  */
 
 import type { AgentStreamEvent } from '@/types/api'
+import { getAuthHeaders, triggerUnauthorized } from './auth'
+import { BASE } from './client'
 
-const BASE = import.meta.env.VITE_API_URL ?? '/api'
+export class StreamError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'StreamError'
+    this.status = status
+  }
+}
 
 export async function consumeSSE<T>(
   path: string,
   options: RequestInit,
   onEvent?: (event: AgentStreamEvent) => void,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, options)
+  const authHeaders = await getAuthHeaders()
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      ...authHeaders,
+      ...options.headers,
+    },
+  })
 
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
@@ -28,16 +38,17 @@ export async function consumeSSE<T>(
     } catch {
       // ignore parse errors
     }
-    throw new Error(detail)
+    if (res.status === 401) {
+      triggerUnauthorized()
+    }
+    throw new StreamError(res.status, detail)
   }
 
   const contentType = res.headers.get('content-type') ?? ''
   if (contentType.includes('application/json')) {
-    // Cache hit — server returned plain JSON, no streaming needed
     return res.json() as Promise<T>
   }
 
-  // SSE stream — read line by line
   if (!res.body) throw new Error('Response body is null')
 
   const reader = res.body.getReader()
@@ -50,7 +61,6 @@ export async function consumeSSE<T>(
 
     buffer += decoder.decode(value, { stream: true })
 
-    // Split on double newlines (SSE message boundaries)
     const parts = buffer.split('\n\n')
     buffer = parts.pop() ?? ''
 

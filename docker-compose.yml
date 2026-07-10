@@ -31,7 +31,6 @@ services:
              uv run fastapi dev app/main.py --host 0.0.0.0 --port 8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://ai_tutor:ai_tutor_pass@db:5432/ai_tutor
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
       TAVILY_API_KEY: ${TAVILY_API_KEY}
     depends_on:
       db:
@@ -46,9 +45,14 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    command: >
+      sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:
       VITE_API_URL: /api
       VITE_DEV_API_PROXY_TARGET: http://backend:8000
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
     depends_on:
       - backend
 

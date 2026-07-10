@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.engine import Base
@@ -12,10 +12,44 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    auth0_user_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    picture: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_login: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    api_key: Mapped["UserApiKey | None"] = relationship(
+        "UserApiKey",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    courses: Mapped[list["Course"]] = relationship("Course", back_populates="user")
+
+
+class UserApiKey(Base):
+    __tablename__ = "user_api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    encrypted_key: Mapped[bytes] = mapped_column(LargeBinary)
+    key_last4: Mapped[str] = mapped_column(String(4))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    user: Mapped["User"] = relationship("User", back_populates="api_key")
+
+
 class Course(Base):
     __tablename__ = "courses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     topic: Mapped[str] = mapped_column(String(256))
     level: Mapped[str] = mapped_column(String(64))
     goal: Mapped[str] = mapped_column(Text)
@@ -30,6 +64,7 @@ class Course(Base):
     progress_records: Mapped[list["Progress"]] = relationship(
         "Progress", back_populates="course", cascade="all, delete-orphan"
     )
+    user: Mapped["User | None"] = relationship("User", back_populates="courses")
 
 
 class Module(Base):

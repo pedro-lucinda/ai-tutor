@@ -9,17 +9,13 @@ from typing import AsyncIterator
 from langchain_core.messages import HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.ai_tutor.agents.on_demand_agent import (
-    make_final_test_agent,
-    make_lesson_agent,
-    make_quiz_agent,
-)
 from app.agents.ai_tutor.orchestrator import run_course_creation, run_course_creation_stream
 from app.agents.ai_tutor.schemas.lesson import LessonContent
 from app.agents.ai_tutor.schemas.quiz import FinalTestOutput, QuizOutput
 from app.agents.ai_tutor.streaming import format_sse, stream_agent
 from app.db import repository as repo
 from app.db.models import Course, Lesson, Quiz, Subtopic
+from app.services.ai_client_factory import ai_client_factory
 
 LANGUAGE_NAMES: dict[str, str] = {
     "en": "English",
@@ -56,11 +52,17 @@ def _extract_structured(result: dict):
 # ---------------------------------------------------------------------------
 
 
-async def create_course(db: AsyncSession, user_goal: str, lang: str = "en") -> Course:
+async def create_course(
+    db: AsyncSession,
+    user_id: int,
+    user_goal: str,
+    lang: str = "en",
+) -> Course:
     """Run the full pipeline (plan → research → build) and persist the result."""
-    output = await run_course_creation(user_goal, lang=lang)
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    output = await run_course_creation(user_goal, api_key=api_key, lang=lang)
 
-    course = await repo.create_course(db, output.plan, language=lang)
+    course = await repo.create_course(db, output.plan, language=lang, user_id=user_id)
     await repo.persist_blueprint(db, course.id, output.blueprint)
     await repo.set_course_ready(db, course.id)
     await db.commit()
@@ -75,6 +77,7 @@ async def create_course(db: AsyncSession, user_goal: str, lang: str = "en") -> C
 
 async def get_or_generate_lesson(
     db: AsyncSession,
+    user_id: int,
     subtopic: Subtopic,
     course_level: str,
     lang: str = "en",
@@ -84,7 +87,8 @@ async def get_or_generate_lesson(
     if existing:
         return existing
 
-    agent = make_lesson_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_lesson_agent(api_key)
     prompt = _build_lesson_prompt(subtopic, course_level, lang)
     result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
     lesson: LessonContent = _extract_structured(result)
@@ -101,6 +105,7 @@ async def get_or_generate_lesson(
 
 async def get_or_generate_quiz(
     db: AsyncSession,
+    user_id: int,
     subtopic: Subtopic,
     course_level: str,
     lesson_json: str | None = None,
@@ -111,7 +116,8 @@ async def get_or_generate_quiz(
     if existing:
         return existing
 
-    agent = make_quiz_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_quiz_agent(api_key)
     lesson_context = f"\n\nLesson content:\n{lesson_json}" if lesson_json else ""
     prompt = (
         f"Generate exactly 3 multiple-choice quiz questions for the subtopic "
@@ -133,6 +139,7 @@ async def get_or_generate_quiz(
 
 async def generate_final_test(
     db: AsyncSession,
+    user_id: int,
     module_id: int,
     course_level: str,
     module_name: str,
@@ -144,7 +151,8 @@ async def generate_final_test(
     if not subtopics:
         raise ValueError("No subtopics to generate final test for.")
 
-    agent = make_final_test_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_final_test_agent(api_key)
 
     subtopic_names = [s.name for s in subtopics]
     weak_note = (
@@ -174,6 +182,7 @@ async def generate_final_test(
 
 async def create_course_stream(
     db: AsyncSession,
+    user_id: int,
     user_goal: str,
     lang: str = "en",
 ) -> AsyncIterator[str]:
@@ -182,8 +191,9 @@ async def create_course_stream(
     Progress events are yielded as they come in; the final event is
     `complete` with the course JSON payload.
     """
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
     output = None
-    async for sse_line, result in run_course_creation_stream(user_goal, lang=lang):
+    async for sse_line, result in run_course_creation_stream(user_goal, api_key=api_key, lang=lang):
         if result is not None:
             output = result
         else:
@@ -193,7 +203,7 @@ async def create_course_stream(
         yield format_sse({"type": "error", "message": "Agent produced no output"})
         return
 
-    course = await repo.create_course(db, output.plan, language=lang)
+    course = await repo.create_course(db, output.plan, language=lang, user_id=user_id)
     await repo.persist_blueprint(db, course.id, output.blueprint)
     await repo.set_course_ready(db, course.id)
     await db.commit()
@@ -224,6 +234,7 @@ async def create_course_stream(
 
 async def get_or_generate_lesson_stream(
     db: AsyncSession,
+    user_id: int,
     subtopic: Subtopic,
     course_level: str,
     lang: str = "en",
@@ -237,7 +248,8 @@ async def get_or_generate_lesson_stream(
         yield format_sse({"type": "complete", "data": json.loads(existing.content_json)})
         return
 
-    agent = make_lesson_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_lesson_agent(api_key)
     prompt = _build_lesson_prompt(subtopic, course_level, lang)
     agent_input = {"messages": [HumanMessage(content=prompt)]}
     lesson_content: LessonContent | None = None
@@ -259,6 +271,7 @@ async def get_or_generate_lesson_stream(
 
 async def get_or_generate_quiz_stream(
     db: AsyncSession,
+    user_id: int,
     subtopic: Subtopic,
     course_level: str,
     lesson_json: str | None = None,
@@ -270,7 +283,8 @@ async def get_or_generate_quiz_stream(
         yield format_sse({"type": "complete", "data": json.loads(existing.questions_json)})
         return
 
-    agent = make_quiz_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_quiz_agent(api_key)
     lesson_context = f"\n\nLesson content:\n{lesson_json}" if lesson_json else ""
     prompt = (
         f"Generate exactly 3 multiple-choice quiz questions for the subtopic "
@@ -297,6 +311,7 @@ async def get_or_generate_quiz_stream(
 
 async def generate_final_test_stream(
     db: AsyncSession,
+    user_id: int,
     module_id: int,
     course_level: str,
     module_name: str,
@@ -309,7 +324,8 @@ async def generate_final_test_stream(
         yield format_sse({"type": "error", "message": "No subtopics to generate final test for."})
         return
 
-    agent = make_final_test_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_final_test_agent(api_key)
     subtopic_names = [s.name for s in subtopics]
     weak_note = (
         f"Weak topics (score extra weight): {weak_topic_names}" if weak_topic_names else ""

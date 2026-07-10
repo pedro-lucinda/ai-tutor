@@ -2,6 +2,8 @@ export default {
   nav: {
     courses: 'Courses',
     newCourse: '+ New course',
+    settings: 'Settings',
+    logout: 'Log out',
     theme: {
       light: 'Switch to light mode',
       dark: 'Switch to dark mode',
@@ -67,6 +69,11 @@ export default {
     deleteConfirm: 'Delete this course and all its progress?',
     deleting: 'Deleting…',
     deleteError: 'Could not delete course.',
+    levels: {
+      beginner: 'Beginner',
+      intermediate: 'Intermediate',
+      advanced: 'Advanced',
+    },
   },
 
   sidebar: {
@@ -157,5 +164,29 @@ export default {
     loading: 'Loading…',
     cancel: 'Cancel',
     backToCourse: 'Back to course',
+  },
+
+  settings: {
+    title: 'Settings',
+    subtitle: 'Manage your account and API keys.',
+    saved: 'API key saved successfully.',
+    removed: 'API key removed.',
+    valid: 'API key is valid.',
+    error: 'Something went wrong.',
+    openai: {
+      title: 'OpenAI API Key',
+      description: 'Your key is encrypted at rest and used only for your AI requests.',
+      label: 'API key',
+      notConfigured: 'No API key configured yet.',
+      save: 'Save',
+      update: 'Update',
+      remove: 'Remove',
+      validate: 'Validate',
+    },
+    banner: {
+      title: 'OpenAI API key required',
+      description: 'Add your OpenAI API key in Settings before creating courses or generating content.',
+      cta: 'Go to Settings',
+    },
   },
 } as const

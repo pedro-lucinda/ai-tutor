@@ -36,8 +36,13 @@ Copy `.env.example` to `.env` and fill in values:
 | Variable | Description |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL URL using the async driver, e.g. `postgresql+asyncpg://user:password@localhost:5432/ai_tutor` |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `TAVILY_API_KEY` | Tavily API key for web search |
+| `TAVILY_API_KEY` | Tavily API key for curriculum web search |
+| `AUTH0_DOMAIN` | Auth0 tenant domain |
+| `AUTH0_AUDIENCE` | Auth0 API identifier |
+| `AUTH0_ISSUER` | Auth0 issuer URL |
+| `APP_ENCRYPTION_KEY` | 32-byte base64 key for encrypting user OpenAI keys at rest |
+
+OpenAI keys are **per-user (BYOK)** — users add their own key in the app Settings page, not via env vars.
 
 #### LangSmith tracing (optional)
 

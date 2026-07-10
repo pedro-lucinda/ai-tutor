@@ -7,8 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.ai_tutor.services.progress_service import get_progress_report, submit_quiz
+from app.auth import CurrentUser, get_current_user
 from app.db.engine import get_db
 from app.db import repository as repo
+from app.services.errors import ApiKeyNotFoundError
 
 progress_router = APIRouter(prefix="/courses", tags=["progress"])
 
@@ -17,17 +19,23 @@ class SubmitAnswersRequest(BaseModel):
     answers: list[int]
 
 
+async def _require_owned_course(db: AsyncSession, course_id: int, current_user: CurrentUser):
+    course = await repo.get_owned_course(db, course_id, current_user.id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return course
+
+
 @progress_router.post("/{course_id}/subtopics/{subtopic_id}/quiz/submit")
 async def submit_quiz_endpoint(
     course_id: int,
     subtopic_id: int,
     request: SubmitAnswersRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Submit answers for a subtopic quiz. Returns score, pass/fail, and whether the next subtopic was unlocked."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    await _require_owned_course(db, course_id, current_user)
 
     subtopic = await repo.get_subtopic(db, subtopic_id)
     if not subtopic:
@@ -63,11 +71,10 @@ async def submit_final_test_endpoint(
     module_id: int,
     request: SubmitAnswersRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Submit answers for a module final test. Returns score and mastery level: review / pass / mastered."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    course = await _require_owned_course(db, course_id, current_user)
 
     module = next((m for m in course.modules if m.id == module_id), None)
     if not module:
@@ -106,11 +113,13 @@ async def submit_final_test_endpoint(
 async def get_progress_endpoint(
     course_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Return a progress report with completion %, weak topics, and LLM recommendation."""
-    course = await repo.get_course(db, course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    await _require_owned_course(db, course_id, current_user)
 
-    report = await get_progress_report(db, course_id)
+    try:
+        report = await get_progress_report(db, course_id, current_user.id)
+    except ApiKeyNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "Please add your OpenAI API key.") from exc
     return report.model_dump()

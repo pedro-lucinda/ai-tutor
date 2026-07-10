@@ -3,7 +3,9 @@ import { BookOpen, GraduationCap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useCourses } from '@/hooks/use-courses'
 import { DeleteCourseButton } from '@/components/modules/delete-course-button'
+import { OpenAIKeyBanner } from '@/components/modules/openai-key-banner'
 import { PageScrollLayout } from '@/layouts/page-scroll-layout'
+import { getCourseLevelLabel } from '@/lib/course-level'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,6 +24,7 @@ export function HomePage() {
   return (
     <PageScrollLayout>
     <div className="flex flex-col gap-8 pb-4">
+      <OpenAIKeyBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{t('home.title')}</h1>
@@ -55,7 +58,9 @@ export function HomePage() {
 
       {courses && courses.length > 0 && (
         <div className="grid gap-4 overflow-visible sm:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course) => (
+          {courses.map((course) => {
+            const levelLabel = getCourseLevelLabel(course.level, t)
+            return (
             <Card key={course.id} className="flex flex-col overflow-visible hover:shadow-md transition-shadow">
               <CardHeader>
                 <CardTitle className="text-base leading-snug pr-2">{course.topic}</CardTitle>
@@ -67,10 +72,12 @@ export function HomePage() {
                 </CardAction>
               </CardHeader>
               <CardContent className="flex-1">
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <BookOpen className="size-3.5" />
-                  {course.level}
-                </div>
+                {levelLabel ? (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <BookOpen className="size-3.5" />
+                    {levelLabel}
+                  </div>
+                ) : null}
               </CardContent>
               <CardFooter>
                 <Button
@@ -83,7 +90,8 @@ export function HomePage() {
                 </Button>
               </CardFooter>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

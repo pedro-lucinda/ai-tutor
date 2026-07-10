@@ -2,6 +2,8 @@ export default {
   nav: {
     courses: 'Cursos',
     newCourse: '+ Novo curso',
+    settings: 'Configurações',
+    logout: 'Sair',
     theme: {
       light: 'Mudar para modo claro',
       dark: 'Mudar para modo escuro',
@@ -67,6 +69,11 @@ export default {
     deleteConfirm: 'Excluir este curso e todo o progresso?',
     deleting: 'Excluindo…',
     deleteError: 'Não foi possível excluir o curso.',
+    levels: {
+      beginner: 'Iniciante',
+      intermediate: 'Intermediário',
+      advanced: 'Avançado',
+    },
   },
 
   sidebar: {
@@ -157,5 +164,29 @@ export default {
     loading: 'Carregando…',
     cancel: 'Cancelar',
     backToCourse: 'Voltar ao curso',
+  },
+
+  settings: {
+    title: 'Configurações',
+    subtitle: 'Gerencie sua conta e chaves de API.',
+    saved: 'Chave de API salva com sucesso.',
+    removed: 'Chave de API removida.',
+    valid: 'Chave de API válida.',
+    error: 'Algo deu errado.',
+    openai: {
+      title: 'Chave da API OpenAI',
+      description: 'Sua chave é criptografada e usada apenas nas suas requisições de IA.',
+      label: 'Chave de API',
+      notConfigured: 'Nenhuma chave configurada ainda.',
+      save: 'Salvar',
+      update: 'Atualizar',
+      remove: 'Remover',
+      validate: 'Validar',
+    },
+    banner: {
+      title: 'Chave da API OpenAI necessária',
+      description: 'Adicione sua chave da OpenAI em Configurações antes de criar cursos ou gerar conteúdo.',
+      cta: 'Ir para Configurações',
+    },
   },
 } as const

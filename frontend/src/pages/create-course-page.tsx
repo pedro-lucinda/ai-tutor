@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { GeneratingLoader } from '@/components/modules/generating-loader'
+import { OpenAIKeyBanner } from '@/components/modules/openai-key-banner'
 import { PageScrollLayout } from '@/layouts/page-scroll-layout'
 import { cn } from '@/lib/utils'
 
@@ -70,9 +71,12 @@ export function CreateCoursePage() {
   return (
     <PageScrollLayout>
     <div className="mx-auto max-w-xl pb-4">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col gap-4">
+        <OpenAIKeyBanner />
+        <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">{t('createCourse.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t('createCourse.subtitle')}</p>
+        </div>
       </div>
 
       <Card>

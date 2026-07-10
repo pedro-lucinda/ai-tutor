@@ -5,10 +5,10 @@ import json
 from langchain_core.messages import HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.ai_tutor.agents.progress import make_progress_agent
 from app.agents.ai_tutor.schemas.progress import ProgressReport, WeakTopic
 from app.db import repository as repo
 from app.db.models import Progress, Quiz, QuizAttempt, Subtopic
+from app.services.ai_client_factory import ai_client_factory
 
 PASS_THRESHOLD = 0.60      # minimum score to unlock next subtopic
 WEAK_TOPIC_THRESHOLD = 0.70  # below this average → flagged as weak
@@ -77,9 +77,9 @@ async def submit_quiz(
     return attempt, unlocked_next
 
 
-async def get_progress_report(db: AsyncSession, course_id: int) -> ProgressReport:
+async def get_progress_report(db: AsyncSession, course_id: int, user_id: int) -> ProgressReport:
     """Compute progress metrics and generate LLM recommendation."""
-    course = await repo.get_course(db, course_id)
+    course = await repo.get_course(db, course_id, user_id=user_id)
     all_progress: list[Progress] = await repo.get_course_progress(db, course_id)
     total_subtopics = (
         sum(len(module.subtopics) for module in course.modules)
@@ -122,7 +122,8 @@ async def get_progress_report(db: AsyncSession, course_id: int) -> ProgressRepor
     ]
 
     # Ask the LLM for a personalised recommendation
-    agent = make_progress_agent()
+    api_key = await ai_client_factory.require_openai_key(db, user_id)
+    agent = ai_client_factory.make_progress_agent(api_key)
     partial = ProgressReport(
         course_id=course_id,
         completion_percent=completion_percent,

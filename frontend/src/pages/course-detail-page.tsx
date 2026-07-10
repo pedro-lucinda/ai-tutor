@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getCourseLevelLabel } from '@/lib/course-level'
 import { getCourseCompletion, isSubtopicCompleted } from '@/lib/course-progress'
 
 export function CourseDetailPage() {
@@ -52,6 +53,7 @@ export function CourseDetailPage() {
 
   const totalSubtopics = course.modules.reduce((a, m) => a + m.subtopics.length, 0)
   const { completedCount, completionPct } = getCourseCompletion(course, progress)
+  const levelLabel = getCourseLevelLabel(course.level, t)
 
   return (
     <CourseWorkspaceLayout sidebar={<CourseSidebar course={course} />}>
@@ -62,7 +64,7 @@ export function CourseDetailPage() {
               <p className="mt-1 text-sm text-muted-foreground">{course.goal}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Badge className="capitalize">{course.level}</Badge>
+              {levelLabel ? <Badge>{levelLabel}</Badge> : null}
               {course.language && (
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Globe className="size-3" />

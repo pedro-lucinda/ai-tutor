@@ -91,6 +91,7 @@ async def persist_blueprint(db: AsyncSession, course_id: int, blueprint: CourseB
                 module_id=module.id,
                 name=sub_bp.name,
                 order=sub_order,
+                lesson_prompt=sub_bp.lesson_prompt,
                 # Only the first subtopic of each module is unlocked at start
                 unlocked=(sub_order == 0),
             )

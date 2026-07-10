@@ -1,6 +1,6 @@
 """Course service — pipeline execution and on-demand lesson/quiz generation.
 
-Validation and retry logic is now handled internally by the DeepAgents supervisors.
+Curriculum validation runs during course creation; on-demand lessons generate directly.
 """
 
 import json
@@ -30,6 +30,21 @@ LANGUAGE_NAMES: dict[str, str] = {
 def _language_instruction(lang: str) -> str:
     name = LANGUAGE_NAMES.get(lang, "English")
     return f"\n\nIMPORTANT: Write ALL output in {name}. Every sentence, explanation, and example must be in {name}."
+
+
+def _build_lesson_prompt(subtopic: Subtopic, course_level: str, lang: str) -> str:
+    if subtopic.lesson_prompt:
+        return (
+            f"Subtopic: '{subtopic.name}'\n"
+            f"Level: {course_level}\n\n"
+            f"Generation instructions:\n{subtopic.lesson_prompt}\n"
+            f"{_language_instruction(lang)}"
+        )
+    return (
+        f"Generate a complete lesson for subtopic '{subtopic.name}' "
+        f"at {course_level} level."
+        f"{_language_instruction(lang)}"
+    )
 
 
 def _extract_structured(result: dict):
@@ -64,17 +79,13 @@ async def get_or_generate_lesson(
     course_level: str,
     lang: str = "en",
 ) -> Lesson:
-    """Return cached lesson or generate via the lesson supervisor, then cache it."""
+    """Return cached lesson or generate via the content generator, then cache it."""
     existing = await repo.get_lesson(db, subtopic.id)
     if existing:
         return existing
 
     agent = make_lesson_agent()
-    prompt = (
-        f"Generate a complete lesson for subtopic '{subtopic.name}' "
-        f"at {course_level} level."
-        f"{_language_instruction(lang)}"
-    )
+    prompt = _build_lesson_prompt(subtopic, course_level, lang)
     result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
     lesson: LessonContent = _extract_structured(result)
 
@@ -227,11 +238,7 @@ async def get_or_generate_lesson_stream(
         return
 
     agent = make_lesson_agent()
-    prompt = (
-        f"Generate a complete lesson for subtopic '{subtopic.name}' "
-        f"at {course_level} level."
-        f"{_language_instruction(lang)}"
-    )
+    prompt = _build_lesson_prompt(subtopic, course_level, lang)
     agent_input = {"messages": [HumanMessage(content=prompt)]}
     lesson_content: LessonContent | None = None
 

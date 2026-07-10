@@ -12,7 +12,7 @@ class ValidationResult(BaseModel):
     section_to_regenerate: str | None = Field(
         default=None,
         description=(
-            "Which section of the lesson or quiz needs to be regenerated. "
-            "One of: 'introduction', 'explanation', 'questions', or None."
+            "Which section needs to be regenerated. "
+            "One of: 'blueprint', 'questions', or None."
         ),
     )

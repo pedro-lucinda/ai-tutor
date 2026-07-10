@@ -59,6 +59,8 @@ class Subtopic(Base):
     lesson_status: Mapped[str] = mapped_column(String(32), default="pending")
     quiz_status: Mapped[str] = mapped_column(String(32), default="pending")
     unlocked: Mapped[bool] = mapped_column(default=True)
+    # Detailed instructions for on-demand lesson generation (from CourseBlueprint)
+    lesson_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     module: Mapped["Module"] = relationship("Module", back_populates="subtopics")
     lesson: Mapped["Lesson | None"] = relationship(

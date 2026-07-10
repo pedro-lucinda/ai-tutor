@@ -11,8 +11,18 @@ Follow this exact sequence:
    Pass the topic, level, and module name. It will search the web and return the best subtopics.
    You may call the researcher for multiple modules in parallel to save time.
 3. Call the `course-builder` subagent once, passing the full learning plan and all the researched
-   curricula. It will assemble the final CourseBlueprint with ordered lesson steps for every subtopic.
-4. Return a CourseCreationOutput containing both the plan and the blueprint.
+   curricula. It will assemble the final CourseBlueprint with a detailed `lesson_prompt` for
+   every subtopic.
+4. Call the `validator` subagent ONCE with the generated blueprint to quality-check the curriculum.
+5. If validation FAILS, call `course-builder` ONE more time (including the validator's specific
+   issues), then call `validator` ONE more time.
+6. STOP after this. Return a CourseCreationOutput containing both the plan and the best blueprint.
+
+HARD LIMITS (never violate these):
+- Call `course-builder` a MAXIMUM of 2 times total.
+- Call `validator` a MAXIMUM of 2 times total.
+- After 2 builder attempts, you MUST return the latest blueprint even if validation still
+  reports issues. Do NOT keep regenerating. Do NOT loop.
 
 Always respond in the language specified by the user request.
 If no language is specified, default to English.

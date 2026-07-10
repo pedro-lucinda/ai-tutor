@@ -1,6 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ThemeProvider } from '@/components/providers/theme-provider'
+import { ThemeSync } from '@/components/providers/theme-sync'
 import { AppLayout } from '@/layouts/app-layout'
 import { HomePage } from '@/pages/home-page'
 import { CreateCoursePage } from '@/pages/create-course-page'
@@ -19,7 +19,8 @@ const queryClient = new QueryClient({
 
 export default function App() {
   return (
-    <ThemeProvider>
+    <>
+      <ThemeSync />
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
         <Routes>
@@ -34,6 +35,6 @@ export default function App() {
         </Routes>
         </BrowserRouter>
       </QueryClientProvider>
-    </ThemeProvider>
+    </>
   )
 }

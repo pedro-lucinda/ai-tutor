@@ -1,7 +1,7 @@
 """Course-creation supervisor using DeepAgents.
 
 Execution sequence (coordinated by the supervisor):
-  learning-planner → curriculum-researcher (once per module) → course-builder
+  learning-planner → curriculum-researcher (once per module) → course-builder → validator
 """
 
 from typing import AsyncIterator
@@ -16,10 +16,12 @@ from app.agents.ai_tutor.prompts.course_builder import COURSE_BUILDER_PROMPT
 from app.agents.ai_tutor.prompts.course_creation_supervisor import COURSE_CREATION_SUPERVISOR_PROMPT
 from app.agents.ai_tutor.prompts.curriculum_research import CURRICULUM_RESEARCH_PROMPT
 from app.agents.ai_tutor.prompts.learning_planner import LEARNING_PLANNER_PROMPT
+from app.agents.ai_tutor.prompts.validation import VALIDATION_PROMPT
 from app.agents.ai_tutor.schemas.course_blueprint import CourseBlueprint
 from app.agents.ai_tutor.schemas.course_creation import CourseCreationOutput
 from app.agents.ai_tutor.schemas.curriculum import CurriculumModuleOutput
 from app.agents.ai_tutor.schemas.learning_plan import LearningPlanOutput
+from app.agents.ai_tutor.schemas.validation import ValidationResult
 from app.agents.ai_tutor.tools.web_search import internet_search
 
 
@@ -62,11 +64,20 @@ def _make_course_creation_agent():
             SubAgent(
                 name="course-builder",
                 description=(
-                    "Assembles the final CourseBlueprint with ordered lesson steps for every "
+                    "Assembles the final CourseBlueprint with a detailed lesson_prompt for every "
                     "subtopic, given the learning plan and all researched curricula."
                 ),
                 system_prompt=COURSE_BUILDER_PROMPT,
                 response_format=CourseBlueprint,
+            ),
+            SubAgent(
+                name="validator",
+                description=(
+                    "Quality-checks the course blueprint for curriculum completeness, subtopic "
+                    "ordering, and lesson prompt quality. Returns passed=True or issues to fix."
+                ),
+                system_prompt=VALIDATION_PROMPT,
+                response_format=ValidationResult,
             ),
         ],
     )

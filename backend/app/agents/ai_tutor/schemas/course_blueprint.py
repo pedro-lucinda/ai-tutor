@@ -5,10 +5,11 @@ class SubtopicBlueprint(BaseModel):
     """Teaching plan for one subtopic."""
 
     name: str = Field(description="Subtopic name")
-    lesson_steps: list[str] = Field(
+    lesson_prompt: str = Field(
         description=(
-            "Ordered teaching steps for this subtopic, e.g. "
-            "['What is a function', 'Parameters', 'Return values', 'Scope', 'Practice', 'Quiz']"
+            "Detailed instructions for generating this subtopic's lesson: "
+            "concepts to cover, depth, analogies, inline code examples, "
+            "common pitfalls to mention, and how it connects to prior subtopics."
         )
     )
 
@@ -17,7 +18,9 @@ class ModuleBlueprint(BaseModel):
     """Teaching plan for one module."""
 
     name: str = Field(description="Module name")
-    subtopics: list[SubtopicBlueprint] = Field(description="Ordered subtopics with their lesson steps")
+    subtopics: list[SubtopicBlueprint] = Field(
+        description="Ordered subtopics with their lesson generation prompts"
+    )
 
 
 class CourseBlueprint(BaseModel):

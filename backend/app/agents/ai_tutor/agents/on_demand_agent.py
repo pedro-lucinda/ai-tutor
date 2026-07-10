@@ -1,43 +1,19 @@
-"""On-demand lesson, quiz, and final-test supervisor agents using DeepAgents."""
+"""On-demand lesson, quiz, and final-test agents using DeepAgents."""
 
-from deepagents import SubAgent, create_deep_agent
+from deepagents import create_deep_agent
 
 from app.agents.ai_tutor.prompts.content_generator import CONTENT_GENERATOR_PROMPT
-from app.agents.ai_tutor.prompts.on_demand_supervisor import ON_DEMAND_LESSON_PROMPT
 from app.agents.ai_tutor.prompts.quiz_generator import FINAL_TEST_PROMPT, QUIZ_GENERATOR_PROMPT
-from app.agents.ai_tutor.prompts.validation import VALIDATION_PROMPT
 from app.agents.ai_tutor.schemas.lesson import LessonContent
 from app.agents.ai_tutor.schemas.quiz import FinalTestOutput, QuizOutput
-from app.agents.ai_tutor.schemas.validation import ValidationResult
-from app.agents.ai_tutor.tools.code_validator import validate_code_example
 
 
 def make_lesson_agent():
+    # Single direct agent — lesson quality is ensured at curriculum build time.
     return create_deep_agent(
-        model="openai:gpt-5-mini",
-        system_prompt=ON_DEMAND_LESSON_PROMPT,
+        model="openai:gpt-4o-mini",
+        system_prompt=CONTENT_GENERATOR_PROMPT,
         response_format=LessonContent,
-        subagents=[
-            SubAgent(
-                name="content-generator",
-                description=(
-                    "Generates a complete structured lesson (introduction and in-depth explanation) "
-                    "for a given subtopic and level."
-                ),
-                system_prompt=CONTENT_GENERATOR_PROMPT,
-                response_format=LessonContent,
-            ),
-            SubAgent(
-                name="validator",
-                description=(
-                    "Quality-checks generated lesson content for factual accuracy, completeness, "
-                    "and code validity. Returns passed=True or a list of issues to fix."
-                ),
-                system_prompt=VALIDATION_PROMPT,
-                tools=[validate_code_example],
-                response_format=ValidationResult,
-            ),
-        ],
     )
 
 

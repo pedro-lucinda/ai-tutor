@@ -113,28 +113,6 @@ function LessonContentView({
         </LessonSection>
       )}
 
-      {lesson.example && (
-        <LessonSection title={t('lesson.sections.example')}>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4 font-mono text-xs leading-relaxed text-foreground">
-            {lesson.example}
-          </pre>
-        </LessonSection>
-      )}
-
-      {lesson.common_mistakes && (
-        <LessonSection title={t('lesson.sections.commonMistakes')}>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-            {lesson.common_mistakes}
-          </p>
-        </LessonSection>
-      )}
-
-      {lesson.summary && (
-        <LessonSection title={t('lesson.sections.summary')}>
-          <p className="text-sm leading-relaxed text-muted-foreground">{lesson.summary}</p>
-        </LessonSection>
-      )}
-
       {quizPath && !streaming && (
         <div className="flex justify-end pt-2">
           <Button render={<Link to={quizPath} />}>

@@ -18,9 +18,9 @@ class QuizOutput(BaseModel):
 
 
 class FinalTestOutput(BaseModel):
-    """Structured output from the Final Test Agent — 20-40 MCQ questions covering a full module."""
+    """Structured output from the Final Test Agent — ~10 MCQ questions covering a full module."""
 
     module: str = Field(description="Module name this final test covers")
     questions: list[QuizQuestion] = Field(
-        description="20–40 questions balanced across all subtopics in the module"
+        description="About 10 questions, balanced across all subtopics in the module"
     )

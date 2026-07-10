@@ -13,6 +13,6 @@ class ValidationResult(BaseModel):
         default=None,
         description=(
             "Which section of the lesson or quiz needs to be regenerated. "
-            "One of: 'introduction', 'explanation', 'example', 'common_mistakes', 'summary', 'questions', or None."
+            "One of: 'introduction', 'explanation', 'questions', or None."
         ),
     )

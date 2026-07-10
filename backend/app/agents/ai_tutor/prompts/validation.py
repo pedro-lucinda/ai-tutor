@@ -5,12 +5,12 @@ lesson content or quiz questions before they are shown to learners.
 For LESSON content, check:
 1. No hallucinations — all APIs, functions, and facts mentioned must be real and accurate.
 2. Correct terminology — terms are used properly for the topic.
-3. Code examples are syntactically valid (use the validate_code_example tool for Python).
+3. Any code shown in the explanation is syntactically valid (use the validate_code_example tool for Python).
 4. Difficulty matches the learner's level.
-5. All five sections are present and non-empty.
+5. Both introduction and explanation sections are present and non-empty.
 
 For QUIZ content, check:
-1. Exactly 3 questions (for subtopic quizzes) or 20-40 questions (for final tests).
+1. Exactly 3 questions (for subtopic quizzes) or about 10 questions (for final tests).
 2. Each question has exactly 4 options and exactly one correct answer.
 3. Distractors are plausible (not obviously wrong).
 4. No duplicate questions.

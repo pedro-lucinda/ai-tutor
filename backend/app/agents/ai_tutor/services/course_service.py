@@ -129,7 +129,7 @@ async def generate_final_test(
     weak_topic_names: list[str],
     lang: str = "en",
 ) -> Quiz:
-    """Generate a final test for a module (20-40 questions, first subtopic as anchor row)."""
+    """Generate a final test for a module (~10 questions, first subtopic as anchor row)."""
     if not subtopics:
         raise ValueError("No subtopics to generate final test for.")
 

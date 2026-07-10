@@ -12,15 +12,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override the sqlalchemy.url from the environment (supports asyncpg URL)
-database_url = os.environ.get("DATABASE_URL", "")
-# Alembic's sync runner needs a sync driver; swap asyncpg → psycopg2 for offline SQL generation
-sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-config.set_main_option("sqlalchemy.url", sync_url)
-
 # Import all models so autogenerate can detect them
 import app.db.models  # noqa: F401, E402
-from app.db.engine import Base  # noqa: E402
+from app.db.engine import Base, normalize_async_url  # noqa: E402
+
+# Override the sqlalchemy.url from the environment (supports asyncpg URL).
+# Managed providers may expose a plain postgresql:// URL; force the asyncpg driver.
+database_url = normalize_async_url(os.environ.get("DATABASE_URL", ""))
+# Alembic's offline/sync runner needs a sync driver; swap asyncpg → psycopg2 for offline SQL generation
+sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+config.set_main_option("sqlalchemy.url", sync_url)
 
 target_metadata = Base.metadata
 

@@ -40,9 +40,6 @@ export interface LessonContent {
   subtopic: string
   introduction: string
   explanation: string
-  example: string
-  common_mistakes: string
-  summary: string
 }
 
 // ─── Quiz ────────────────────────────────────────────────────────────────────

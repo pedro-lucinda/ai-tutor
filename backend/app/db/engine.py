@@ -8,6 +8,22 @@ class Base(DeclarativeBase):
     pass
 
 
+def normalize_async_url(url: str) -> str:
+    """Ensure the URL uses the asyncpg driver.
+
+    Managed providers (e.g. Render) expose DATABASE_URL as ``postgresql://`` or
+    ``postgres://``, which SQLAlchemy maps to the sync psycopg2 driver. The async
+    engine requires the ``postgresql+asyncpg://`` scheme.
+    """
+    if url.startswith("postgresql+asyncpg://"):
+        return url
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
 _engine = None
 _session_local = None
 
@@ -15,7 +31,7 @@ _session_local = None
 def _get_engine():
     global _engine
     if _engine is None:
-        url = os.environ["DATABASE_URL"]
+        url = normalize_async_url(os.environ["DATABASE_URL"])
         _engine = create_async_engine(url, echo=False)
     return _engine
 

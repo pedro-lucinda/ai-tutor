@@ -78,8 +78,12 @@ def _handle_partial_tool_stream(
             args = getattr(tcc, "args", None) or ""
 
         if name == partial_tool_name:
+            # Start of a new structured-output tool call (e.g. a regeneration
+            # pass). Reset the buffer AND last_emitted so the fresh content
+            # streams cleanly instead of diffing against the previous pass.
             buffer_state["active_index"] = index
             buffer_state["buffer"] = args
+            buffer_state["last_emitted"] = None
             buffer_changed = True
         elif (
             buffer_state.get("active_index") is not None
@@ -120,7 +124,9 @@ async def stream_agent(
     final_output: Any = None
     buffer_state: dict[str, Any] = {}
 
-    async for raw in agent.astream_events(agent_input, version="v2"):
+    async for raw in agent.astream_events(
+        agent_input, version="v2", config={"recursion_limit": 50}
+    ):
         # Capture structured_response from the outermost graph's chain-end event.
         if raw.get("event") == "on_chain_end":
             data_out = raw.get("data", {}).get("output", {})

@@ -89,9 +89,6 @@ export default {
     sections: {
       introduction: 'Introduction',
       explanation: 'Explanation',
-      example: 'Example',
-      commonMistakes: 'Common mistakes',
-      summary: 'Summary',
     },
     takeQuiz: 'Take quiz',
     streaming: 'Writing your lesson…',

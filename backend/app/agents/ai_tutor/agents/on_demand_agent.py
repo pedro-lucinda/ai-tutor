@@ -4,7 +4,6 @@ from deepagents import SubAgent, create_deep_agent
 
 from app.agents.ai_tutor.prompts.content_generator import CONTENT_GENERATOR_PROMPT
 from app.agents.ai_tutor.prompts.on_demand_supervisor import (
-    ON_DEMAND_FINAL_TEST_PROMPT,
     ON_DEMAND_LESSON_PROMPT,
     ON_DEMAND_QUIZ_PROMPT,
 )
@@ -18,15 +17,15 @@ from app.agents.ai_tutor.tools.code_validator import validate_code_example
 
 def make_lesson_agent():
     return create_deep_agent(
-        model="openai:gpt-4o",
+        model="openai:gpt-5-mini",
         system_prompt=ON_DEMAND_LESSON_PROMPT,
         response_format=LessonContent,
         subagents=[
             SubAgent(
                 name="content-generator",
                 description=(
-                    "Generates a complete structured lesson (introduction, explanation, example, "
-                    "common_mistakes, summary) for a given subtopic and level."
+                    "Generates a complete structured lesson (introduction and in-depth explanation) "
+                    "for a given subtopic and level."
                 ),
                 system_prompt=CONTENT_GENERATOR_PROMPT,
                 response_format=LessonContent,
@@ -75,29 +74,10 @@ def make_quiz_agent():
 
 
 def make_final_test_agent():
+    # A single direct agent (no supervisor loop, no validator) keeps final-test
+    # generation fast and avoids the recursion the multi-agent flow was prone to.
     return create_deep_agent(
         model="openai:gpt-4o",
-        system_prompt=ON_DEMAND_FINAL_TEST_PROMPT,
+        system_prompt=FINAL_TEST_PROMPT,
         response_format=FinalTestOutput,
-        subagents=[
-            SubAgent(
-                name="quiz-generator",
-                description=(
-                    "Generates 20-40 multiple-choice questions for a final module test, "
-                    "balanced across all subtopics and weighting weak topic areas."
-                ),
-                system_prompt=FINAL_TEST_PROMPT,
-                response_format=FinalTestOutput,
-            ),
-            SubAgent(
-                name="validator",
-                description=(
-                    "Quality-checks the final test for question count, topic coverage, "
-                    "and structural correctness."
-                ),
-                system_prompt=VALIDATION_PROMPT,
-                tools=[validate_code_example],
-                response_format=ValidationResult,
-            ),
-        ],
     )

@@ -1,4 +1,4 @@
-CONTENT_GENERATOR_PROMPT = """
+LESSON_PROMPT = """
 You are a Content Generator for an AI tutoring platform.
 
 You will be given:

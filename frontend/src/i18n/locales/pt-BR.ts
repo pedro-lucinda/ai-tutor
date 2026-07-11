@@ -158,6 +158,12 @@ export default {
   agents: {
     working: 'Construindo com IA…',
     cachingNote: 'A IA está gerando este conteúdo pela primeira vez. Será armazenado em cache para visitas futuras.',
+    phases: {
+      '0': 'Carregando…',
+      '1': 'Gerando conteúdo com IA…',
+      '2': 'Quase lá — isso só acontece uma vez…',
+      '3': 'Ainda trabalhando — tópicos complexos levam um pouco mais…',
+    },
     'learning-planner': 'Planejando trilha de aprendizado',
     'curriculum-researcher': 'Pesquisando currículo',
     'course-builder': 'Construindo estrutura do curso',

@@ -99,7 +99,7 @@ sequenceDiagram
     Supervisor-->>User: CourseCreationOutput
 ```
 
-**Defined in:** `orchestrator.py`
+**Defined in:** `agents/course_creation.py`
 
 ```python
 create_deep_agent(
@@ -132,12 +132,12 @@ The blueprint is persisted to PostgreSQL. Each `Subtopic` row stores its `lesson
 
 Lessons are generated lazily when a learner opens a subtopic. If cached, the API returns JSON immediately. Otherwise it streams progress over SSE.
 
-**Defined in:** `agents/on_demand_agent.py` → `make_lesson_agent()`
+**Defined in:** `agents/lesson.py` → `make_lesson_agent()`
 
 ```python
 create_deep_agent(
     model="openai:gpt-4o-mini",
-    system_prompt=CONTENT_GENERATOR_PROMPT,
+    system_prompt=LESSON_PROMPT,
     response_format=LessonContent,
 )
 ```
@@ -280,9 +280,12 @@ Traces show model, token usage, structured input/output, and subagent delegation
 
 ```
 backend/app/agents/ai_tutor/
-├── orchestrator.py              # Course creation supervisor + subagents
+├── language.py                  # Shared language instruction helper
+├── streaming.py                 # LangGraph → SSE bridge
 ├── agents/
-│   ├── on_demand_agent.py       # Lesson, quiz, final test factories
+│   ├── course_creation.py       # Course creation supervisor + stream runner
+│   ├── lesson.py                # Lesson agent factory
+│   ├── quiz.py                  # Quiz + final-test agent factories
 │   └── progress.py              # Progress report agent
 ├── prompts/
 │   ├── course_creation_supervisor.py
@@ -290,14 +293,13 @@ backend/app/agents/ai_tutor/
 │   ├── curriculum_research.py
 │   ├── course_builder.py
 │   ├── validation.py
-│   ├── content_generator.py
-│   ├── quiz_generator.py
+│   ├── lesson.py
+│   ├── quiz.py
 │   └── progress.py
 ├── schemas/                     # Pydantic response_format models
 ├── services/
 │   ├── course_service.py        # Invokes agents, persists results, SSE generators
 │   └── progress_service.py
-├── streaming.py                 # LangGraph → SSE bridge
 └── tools/
     └── web_search.py            # Tavily search for curriculum researcher
 ```

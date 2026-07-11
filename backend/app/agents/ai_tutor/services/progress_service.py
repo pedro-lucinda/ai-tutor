@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.ai_tutor.schemas.progress import ProgressReport, WeakTopic
 from app.db import repository as repo
 from app.db.models import Progress, Quiz, QuizAttempt, Subtopic
-from app.services.ai_client_factory import ai_client_factory
+from app.agents.ai_tutor.client_factory import ai_client_factory
 
 PASS_THRESHOLD = 0.60      # minimum score to unlock next subtopic
 WEAK_TOPIC_THRESHOLD = 0.70  # below this average → flagged as weak

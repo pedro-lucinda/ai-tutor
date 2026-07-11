@@ -158,6 +158,12 @@ export default {
   agents: {
     working: 'Building with AI…',
     cachingNote: 'The AI is generating this content for the first time. It will be cached for future visits.',
+    phases: {
+      '0': 'Loading…',
+      '1': 'Generating content with AI…',
+      '2': 'Almost there — this only happens once…',
+      '3': 'Still working — complex topics take a bit longer…',
+    },
     'learning-planner': 'Planning learning path',
     'curriculum-researcher': 'Researching curriculum',
     'course-builder': 'Building course structure',

@@ -7,13 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agents.ai_tutor.schemas import (
-    CourseBlueprint,
-    LearningPlanOutput,
-    LessonContent,
-    QuizOutput,
-    ValidationResult,
-)
+from app.constants import ContentStatus, CourseStatus, QuizType
 from app.db.models import Course, Lesson, Module, Progress, Quiz, QuizAttempt, Subtopic, User, UserApiKey
 
 
@@ -54,11 +48,6 @@ async def upsert_user_from_auth0(
         db.add(user)
     await db.flush()
     return user
-
-
-async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------
@@ -112,16 +101,20 @@ async def delete_user_api_key(db: AsyncSession, user_id: int) -> bool:
 
 async def create_course(
     db: AsyncSession,
-    plan: LearningPlanOutput,
+    *,
+    topic: str,
+    level: str,
+    goal: str,
+    estimated_hours: int,
     language: str = "en",
     user_id: int | None = None,
 ) -> Course:
     course = Course(
-        topic=plan.topic,
-        level=plan.level,
-        goal=plan.goal,
-        estimated_hours=plan.estimated_hours,
-        status="building",
+        topic=topic,
+        level=level,
+        goal=goal,
+        estimated_hours=estimated_hours,
+        status=CourseStatus.BUILDING,
         language=language,
         user_id=user_id,
     )
@@ -134,13 +127,10 @@ async def set_course_ready(db: AsyncSession, course_id: int) -> None:
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
     if course:
-        course.status = "ready"
+        course.status = CourseStatus.READY
 
 
 async def get_course(db: AsyncSession, course_id: int, user_id: int | None = None) -> Course | None:
-    # Use select() instead of db.get() so that selectinload options are always
-    # applied — db.get() may return a cached identity-map object and skip the
-    # eager-load query, causing MissingGreenlet errors on async engines.
     query = (
         select(Course)
         .where(Course.id == course_id)
@@ -178,28 +168,28 @@ async def delete_course(db: AsyncSession, course_id: int, user_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Modules & Subtopics (populated from CourseBlueprint)
+# Modules & Subtopics
 # ---------------------------------------------------------------------------
 
 
-async def persist_blueprint(db: AsyncSession, course_id: int, blueprint: CourseBlueprint) -> None:
-    for module_order, module_bp in enumerate(blueprint.modules):
+async def persist_blueprint(db: AsyncSession, course_id: int, blueprint_json: str) -> None:
+    blueprint = json.loads(blueprint_json)
+    for module_order, module_bp in enumerate(blueprint.get("modules", [])):
         module = Module(
             course_id=course_id,
-            name=module_bp.name,
+            name=module_bp["name"],
             order=module_order,
-            blueprint_json=module_bp.model_dump_json(),
+            blueprint_json=json.dumps(module_bp),
         )
         db.add(module)
         await db.flush()
 
-        for sub_order, sub_bp in enumerate(module_bp.subtopics):
+        for sub_order, sub_bp in enumerate(module_bp.get("subtopics", [])):
             subtopic = Subtopic(
                 module_id=module.id,
-                name=sub_bp.name,
+                name=sub_bp["name"],
                 order=sub_order,
-                lesson_prompt=sub_bp.lesson_prompt,
-                # Only the first subtopic of each module is unlocked at start
+                lesson_prompt=sub_bp.get("lesson_prompt"),
                 unlocked=(sub_order == 0),
             )
             db.add(subtopic)
@@ -209,6 +199,32 @@ async def persist_blueprint(db: AsyncSession, course_id: int, blueprint: CourseB
 
 async def get_subtopic(db: AsyncSession, subtopic_id: int) -> Subtopic | None:
     result = await db.execute(select(Subtopic).where(Subtopic.id == subtopic_id))
+    return result.scalar_one_or_none()
+
+
+async def get_subtopic_for_course(
+    db: AsyncSession,
+    course_id: int,
+    subtopic_id: int,
+) -> Subtopic | None:
+    result = await db.execute(
+        select(Subtopic)
+        .join(Module, Subtopic.module_id == Module.id)
+        .where(Subtopic.id == subtopic_id, Module.course_id == course_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_module_for_course(
+    db: AsyncSession,
+    course_id: int,
+    module_id: int,
+) -> Module | None:
+    result = await db.execute(
+        select(Module)
+        .where(Module.id == module_id, Module.course_id == course_id)
+        .options(selectinload(Module.subtopics))
+    )
     return result.scalar_one_or_none()
 
 
@@ -241,17 +257,24 @@ async def get_lesson(db: AsyncSession, subtopic_id: int) -> Lesson | None:
     return result.scalar_one_or_none()
 
 
-async def save_lesson(db: AsyncSession, subtopic_id: int, content: LessonContent, validated: bool = True) -> Lesson:
+async def save_lesson(
+    db: AsyncSession,
+    subtopic_id: int,
+    content_json: str,
+    validated: bool = True,
+) -> Lesson:
     lesson = Lesson(
         subtopic_id=subtopic_id,
-        content_json=content.model_dump_json(),
+        content_json=content_json,
         validated_at=datetime.now(timezone.utc) if validated else None,
     )
     db.add(lesson)
 
     subtopic = await db.get(Subtopic, subtopic_id)
     if subtopic:
-        subtopic.lesson_status = "validated" if validated else "generated"
+        subtopic.lesson_status = (
+            ContentStatus.VALIDATED if validated else ContentStatus.GENERATED
+        )
 
     await db.flush()
     return lesson
@@ -262,25 +285,36 @@ async def save_lesson(db: AsyncSession, subtopic_id: int, content: LessonContent
 # ---------------------------------------------------------------------------
 
 
-async def get_quiz(db: AsyncSession, subtopic_id: int, quiz_type: str = "subtopic") -> Quiz | None:
+async def get_quiz(
+    db: AsyncSession,
+    subtopic_id: int,
+    quiz_type: str = QuizType.SUBTOPIC,
+) -> Quiz | None:
     result = await db.execute(
         select(Quiz).where(Quiz.subtopic_id == subtopic_id, Quiz.type == quiz_type)
     )
     return result.scalar_one_or_none()
 
 
-async def save_quiz(db: AsyncSession, subtopic_id: int, quiz: QuizOutput, validated: bool = True) -> Quiz:
+async def save_quiz(
+    db: AsyncSession,
+    subtopic_id: int,
+    questions_json: str,
+    validated: bool = True,
+) -> Quiz:
     db_quiz = Quiz(
         subtopic_id=subtopic_id,
-        type="subtopic",
-        questions_json=quiz.model_dump_json(),
+        type=QuizType.SUBTOPIC,
+        questions_json=questions_json,
         validated_at=datetime.now(timezone.utc) if validated else None,
     )
     db.add(db_quiz)
 
     subtopic = await db.get(Subtopic, subtopic_id)
     if subtopic:
-        subtopic.quiz_status = "validated" if validated else "generated"
+        subtopic.quiz_status = (
+            ContentStatus.VALIDATED if validated else ContentStatus.GENERATED
+        )
 
     await db.flush()
     return db_quiz
@@ -289,7 +323,7 @@ async def save_quiz(db: AsyncSession, subtopic_id: int, quiz: QuizOutput, valida
 async def save_final_quiz(db: AsyncSession, subtopic_id: int, questions_json: str) -> Quiz:
     db_quiz = Quiz(
         subtopic_id=subtopic_id,
-        type="final",
+        type=QuizType.FINAL,
         questions_json=questions_json,
         validated_at=datetime.now(timezone.utc),
     )
@@ -357,17 +391,3 @@ async def get_course_progress(db: AsyncSession, course_id: int) -> list[Progress
         .options(selectinload(Progress.subtopic))
     )
     return list(result.scalars().all())
-
-
-async def get_subtopic_attempts(db: AsyncSession, subtopic_id: int) -> list[QuizAttempt]:
-    result = await db.execute(
-        select(QuizAttempt)
-        .join(Quiz, QuizAttempt.quiz_id == Quiz.id)
-        .where(Quiz.subtopic_id == subtopic_id)
-        .order_by(QuizAttempt.created_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-async def get_validation_result(db: AsyncSession, result: ValidationResult) -> ValidationResult:
-    return result

@@ -6,63 +6,45 @@ export interface AgentStep {
   status: 'running' | 'done'
 }
 
-// The agent pipeline is conceptually sequential (generate → validate → maybe
-// regenerate), but the backend can emit start/end events that interleave. To
-// avoid showing two steps as "running" at once (or a later step finishing
-// before an earlier one), we serialize the display: starting any agent marks
-// all in-flight steps as done, and the freshly started agent is always the
-// single active step, moved to the end so the list reads chronologically.
+interface UseAgentProgressOptions {
+  trackLessonDeltas?: boolean
+}
+
 function applyAgentStart(prev: AgentStep[], agent: string): AgentStep[] {
   const completed = prev
-    .filter((s) => s.agent !== agent)
-    .map((s) => (s.status === 'running' ? { ...s, status: 'done' as const } : s))
+    .filter((step) => step.agent !== agent)
+    .map((step) =>
+      step.status === 'running' ? { ...step, status: 'done' as const } : step,
+    )
   return [...completed, { agent, status: 'running' }]
 }
 
-// At most one step is ever running (see applyAgentStart), so ending simply
-// completes any in-flight step regardless of which agent the event names.
 function applyAgentEnd(prev: AgentStep[]): AgentStep[] {
-  return prev.map((s) => (s.status === 'running' ? { ...s, status: 'done' } : s))
+  return prev.map((step) =>
+    step.status === 'running' ? { ...step, status: 'done' } : step,
+  )
 }
 
-export function useAgentProgress() {
-  const [steps, setSteps] = useState<AgentStep[]>([])
-  const [currentAgent, setCurrentAgent] = useState<string | null>(null)
-
-  const onEvent = useCallback((event: AgentStreamEvent) => {
-    if (event.type === 'agent_start') {
-      setCurrentAgent(event.agent)
-      setSteps((prev) => applyAgentStart(prev, event.agent))
-    } else if (event.type === 'agent_end') {
-      setCurrentAgent(null)
-      setSteps(applyAgentEnd)
-    }
-  }, [])
-
-  const reset = useCallback(() => {
-    setSteps([])
-    setCurrentAgent(null)
-  }, [])
-
-  return { steps, currentAgent, onEvent, reset }
-}
-
-export function useStreamingLesson() {
+export function useAgentProgress(options: UseAgentProgressOptions = {}) {
+  const { trackLessonDeltas = false } = options
   const [steps, setSteps] = useState<AgentStep[]>([])
   const [currentAgent, setCurrentAgent] = useState<string | null>(null)
   const [partialLesson, setPartialLesson] = useState<Partial<LessonContent>>({})
 
-  const onEvent = useCallback((event: AgentStreamEvent) => {
-    if (event.type === 'agent_start') {
-      setCurrentAgent(event.agent)
-      setSteps((prev) => applyAgentStart(prev, event.agent))
-    } else if (event.type === 'agent_end') {
-      setCurrentAgent(null)
-      setSteps(applyAgentEnd)
-    } else if (event.type === 'lesson_delta') {
-      setPartialLesson((prev) => ({ ...prev, ...event.data }))
-    }
-  }, [])
+  const onEvent = useCallback(
+    (event: AgentStreamEvent) => {
+      if (event.type === 'agent_start') {
+        setCurrentAgent(event.agent)
+        setSteps((prev) => applyAgentStart(prev, event.agent))
+      } else if (event.type === 'agent_end') {
+        setCurrentAgent(null)
+        setSteps(applyAgentEnd)
+      } else if (trackLessonDeltas && event.type === 'lesson_delta') {
+        setPartialLesson((prev) => ({ ...prev, ...event.data }))
+      }
+    },
+    [trackLessonDeltas],
+  )
 
   const reset = useCallback(() => {
     setSteps([])
@@ -74,5 +56,16 @@ export function useStreamingLesson() {
     (value) => typeof value === 'string' && value.length > 0,
   )
 
-  return { steps, currentAgent, partialLesson, hasPartialContent, onEvent, reset }
+  return {
+    steps,
+    currentAgent,
+    partialLesson,
+    hasPartialContent,
+    onEvent,
+    reset,
+  }
+}
+
+export function useStreamingLesson() {
+  return useAgentProgress({ trackLessonDeltas: true })
 }

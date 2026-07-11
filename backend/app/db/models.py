@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.constants import ContentStatus
 from app.db.engine import Base
 
 
@@ -91,9 +92,9 @@ class Subtopic(Base):
     name: Mapped[str] = mapped_column(String(256))
     order: Mapped[int] = mapped_column(Integer)
     # 'pending' | 'generated' | 'validated'
-    lesson_status: Mapped[str] = mapped_column(String(32), default="pending")
-    quiz_status: Mapped[str] = mapped_column(String(32), default="pending")
-    unlocked: Mapped[bool] = mapped_column(default=True)
+    lesson_status: Mapped[str] = mapped_column(String(32), default=ContentStatus.PENDING)
+    quiz_status: Mapped[str] = mapped_column(String(32), default=ContentStatus.PENDING)
+    unlocked: Mapped[bool] = mapped_column(default=False)
     # Detailed instructions for on-demand lesson generation (from CourseBlueprint)
     lesson_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -167,7 +168,6 @@ class Progress(Base):
     subtopic_id: Mapped[int] = mapped_column(ForeignKey("subtopics.id", ondelete="CASCADE"))
     quiz_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     completed: Mapped[bool] = mapped_column(default=False)
-    time_spent_sec: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
     course: Mapped["Course"] = relationship("Course", back_populates="progress_records")

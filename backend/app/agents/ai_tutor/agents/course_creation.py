@@ -6,14 +6,11 @@ Execution sequence (coordinated by the supervisor):
 
 from typing import AsyncIterator
 
+from deepagents import SubAgent, create_deep_agent
 from langchain_core.messages import HumanMessage
-
 from langchain_openai import ChatOpenAI
 
-from deepagents import SubAgent, create_deep_agent
-
-from app.agents.ai_tutor.streaming import stream_agent
-
+from app.agents.ai_tutor.language import language_instruction
 from app.agents.ai_tutor.prompts.course_builder import COURSE_BUILDER_PROMPT
 from app.agents.ai_tutor.prompts.course_creation_supervisor import COURSE_CREATION_SUPERVISOR_PROMPT
 from app.agents.ai_tutor.prompts.curriculum_research import CURRICULUM_RESEARCH_PROMPT
@@ -24,18 +21,8 @@ from app.agents.ai_tutor.schemas.course_creation import CourseCreationOutput
 from app.agents.ai_tutor.schemas.curriculum import CurriculumModuleOutput
 from app.agents.ai_tutor.schemas.learning_plan import LearningPlanOutput
 from app.agents.ai_tutor.schemas.validation import ValidationResult
+from app.agents.ai_tutor.streaming import stream_agent
 from app.agents.ai_tutor.tools.web_search import internet_search
-
-
-LANGUAGE_NAMES: dict[str, str] = {
-    "en": "English",
-    "pt-BR": "Portuguese (Brazil)",
-}
-
-
-def _language_instruction(lang: str) -> str:
-    name = LANGUAGE_NAMES.get(lang, "English")
-    return f"\n\nIMPORTANT: Write ALL output in {name}. Every field, name, and description must be in {name}."
 
 
 def make_course_creation_agent(api_key: str):
@@ -86,33 +73,21 @@ def make_course_creation_agent(api_key: str):
     )
 
 
-async def run_course_creation(user_goal: str, api_key: str, lang: str = "en") -> CourseCreationOutput:
-    """Run the full course-creation pipeline and return a CourseCreationOutput.
-
-    Persistence (saving to DB) is handled by the caller (course_service.py)
-    to keep this module framework-agnostic.
-    """
-    agent = make_course_creation_agent(api_key)
-    result = await agent.ainvoke({
-        "messages": [HumanMessage(content=user_goal + _language_instruction(lang))]
-    })
-    output: CourseCreationOutput = result.get("structured_response")
-    return output
-
-
 async def run_course_creation_stream(
     user_goal: str,
     api_key: str,
     lang: str = "en",
 ) -> AsyncIterator[tuple[str, CourseCreationOutput | None]]:
-    """Streaming variant of run_course_creation.
+    """Stream course-creation progress, then yield the structured result.
 
     Yields (sse_line, None) for progress events, then yields
     (complete_sse_line, CourseCreationOutput) as the final tuple so the
     caller (course_service) can persist the result to the DB.
     """
     agent = make_course_creation_agent(api_key)
-    agent_input = {"messages": [HumanMessage(content=user_goal + _language_instruction(lang))]}
+    agent_input = {
+        "messages": [HumanMessage(content=user_goal + language_instruction(lang))]
+    }
 
     async for sse_line, output in stream_agent(agent, agent_input):
         yield sse_line, output

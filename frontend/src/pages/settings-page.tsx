@@ -1,70 +1,29 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import {
-  deleteOpenAIKey,
-  getOpenAIKeyStatus,
-  saveOpenAIKey,
-  validateOpenAIKey,
-} from '@/api/settings'
-import { ApiError } from '@/api/client'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  getSettingsErrorMessage,
+  useDeleteOpenAIKey,
+  useOpenAIKeyStatus,
+  useSaveOpenAIKey,
+  useValidateOpenAIKey,
+} from '@/hooks/use-settings'
 import { PageScrollLayout } from '@/layouts/page-scroll-layout'
 
 export function SettingsPage() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const [apiKey, setApiKey] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const { data: status, isLoading } = useQuery({
-    queryKey: ['settings', 'openai'],
-    queryFn: getOpenAIKeyStatus,
-  })
-
-  const saveMutation = useMutation({
-    mutationFn: saveOpenAIKey,
-    onSuccess: () => {
-      setApiKey('')
-      setError(null)
-      setMessage(t('settings.saved'))
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'openai'] })
-    },
-    onError: (err: unknown) => {
-      setMessage(null)
-      setError(err instanceof ApiError ? err.detail : t('settings.error'))
-    },
-  })
-
-  const validateMutation = useMutation({
-    mutationFn: validateOpenAIKey,
-    onSuccess: () => {
-      setError(null)
-      setMessage(t('settings.valid'))
-    },
-    onError: (err: unknown) => {
-      setMessage(null)
-      setError(err instanceof ApiError ? err.detail : t('settings.error'))
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteOpenAIKey,
-    onSuccess: () => {
-      setError(null)
-      setMessage(t('settings.removed'))
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'openai'] })
-    },
-    onError: (err: unknown) => {
-      setMessage(null)
-      setError(err instanceof ApiError ? err.detail : t('settings.error'))
-    },
-  })
+  const { data: status, isLoading } = useOpenAIKeyStatus()
+  const saveMutation = useSaveOpenAIKey()
+  const validateMutation = useValidateOpenAIKey()
+  const deleteMutation = useDeleteOpenAIKey()
 
   const maskedKey =
     status?.configured && status.key_last4 ? `************${status.key_last4}` : null
@@ -99,7 +58,7 @@ export function SettingsPage() {
                 autoComplete="off"
                 placeholder="sk-..."
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(event) => setApiKey(event.target.value)}
               />
             </div>
 
@@ -117,14 +76,37 @@ export function SettingsPage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={!apiKey.trim() || saveMutation.isPending}
-                onClick={() => saveMutation.mutate(apiKey.trim())}
+                onClick={() => {
+                  saveMutation.mutate(apiKey.trim(), {
+                    onSuccess: () => {
+                      setApiKey('')
+                      setError(null)
+                      setMessage(t('settings.saved'))
+                    },
+                    onError: (err) => {
+                      setMessage(null)
+                      setError(getSettingsErrorMessage(err, t('settings.error')))
+                    },
+                  })
+                }}
               >
                 {status?.configured ? t('settings.openai.update') : t('settings.openai.save')}
               </Button>
               <Button
                 variant="outline"
                 disabled={!apiKey.trim() || validateMutation.isPending}
-                onClick={() => validateMutation.mutate(apiKey.trim())}
+                onClick={() => {
+                  validateMutation.mutate(apiKey.trim(), {
+                    onSuccess: () => {
+                      setError(null)
+                      setMessage(t('settings.valid'))
+                    },
+                    onError: (err) => {
+                      setMessage(null)
+                      setError(getSettingsErrorMessage(err, t('settings.error')))
+                    },
+                  })
+                }}
               >
                 {t('settings.openai.validate')}
               </Button>
@@ -132,7 +114,18 @@ export function SettingsPage() {
                 <Button
                   variant="destructive"
                   disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
+                  onClick={() => {
+                    deleteMutation.mutate(undefined, {
+                      onSuccess: () => {
+                        setError(null)
+                        setMessage(t('settings.removed'))
+                      },
+                      onError: (err) => {
+                        setMessage(null)
+                        setError(getSettingsErrorMessage(err, t('settings.error')))
+                      },
+                    })
+                  }}
                 >
                   {t('settings.openai.remove')}
                 </Button>

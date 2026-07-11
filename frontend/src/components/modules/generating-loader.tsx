@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getAgentLabel, filterVisibleAgentSteps } from '@/lib/agent-label'
+import { AgentStepList } from '@/components/modules/agent-step-list'
+import { filterVisibleAgentSteps } from '@/lib/agent-label'
 import type { AgentStep } from '@/hooks/use-agent-progress'
 
 interface GeneratingLoaderProps {
@@ -10,93 +11,48 @@ interface GeneratingLoaderProps {
   currentAgent?: string | null
 }
 
-const PHASES = [
-  { delay: 0, text: 'Loading…' },
-  { delay: 4000, text: 'Generating content with AI…' },
-  { delay: 12000, text: 'Almost there — this only happens once…' },
-  { delay: 30000, text: 'Still working — complex topics take a bit longer…' },
-]
+const PHASE_DELAYS = [0, 4000, 12000, 30000] as const
 
-export function GeneratingLoader({
-  label,
-  steps,
-  currentAgent,
-}: GeneratingLoaderProps) {
+export function GeneratingLoader({ label, steps, currentAgent }: GeneratingLoaderProps) {
   const { t } = useTranslation()
   const [phaseIndex, setPhaseIndex] = useState(0)
-  const hasLiveSteps = steps && filterVisibleAgentSteps(steps).length > 0
-  const visibleSteps = steps ? filterVisibleAgentSteps(steps) : []
-  const visibleCurrentAgent =
-    currentAgent && getAgentLabel(currentAgent, t) ? currentAgent : null
+  const hasLiveSteps = steps ? filterVisibleAgentSteps(steps).length > 0 : false
 
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = []
-    PHASES.slice(1).forEach((phase, i) => {
-      timers.push(setTimeout(() => setPhaseIndex(i + 1), phase.delay))
-    })
+    const timers = PHASE_DELAYS.slice(1).map((delay, index) =>
+      setTimeout(() => setPhaseIndex(index + 1), delay),
+    )
     return () => timers.forEach(clearTimeout)
   }, [])
 
-  const phase = PHASES[phaseIndex]
+  const phaseKey = `agents.phases.${phaseIndex}` as const
   const isGenerating = phaseIndex >= 1
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 py-16 w-full">
+    <div className="flex w-full flex-col items-center justify-center gap-6 py-16">
       <div className="relative flex items-center justify-center">
         <Loader2 className="size-12 animate-spin text-muted-foreground" />
         {(isGenerating || hasLiveSteps) && (
-          <Sparkles className="absolute size-5 text-primary animate-pulse" />
+          <Sparkles className="absolute size-5 animate-pulse text-primary" />
         )}
       </div>
 
-      <div className="text-center max-w-sm">
+      <div className="max-w-sm text-center">
         <p className="font-medium text-foreground">
-          {label ?? (hasLiveSteps ? t('agents.working') : phase.text)}
+          {label ?? (hasLiveSteps ? t('agents.working') : t(phaseKey))}
         </p>
-        {(isGenerating || hasLiveSteps) && !label && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('agents.cachingNote')}
-          </p>
-        )}
+        {(isGenerating || hasLiveSteps) && !label ? (
+          <p className="mt-1 text-sm text-muted-foreground">{t('agents.cachingNote')}</p>
+        ) : null}
       </div>
 
-      {/* Live agent step list (shown when SSE events are coming in) */}
-      {hasLiveSteps && (
-        <div className="w-full max-w-sm flex flex-col gap-2  mx-auto ">
-          {visibleSteps.map((step) => {
-            const label = getAgentLabel(step.agent, t)
-            if (!label) return null
-            return (
-            <div key={step.agent} className="flex items-center gap-2 text-sm mx-auto">
-              {step.status === 'done' ? (
-                <CheckCircle2 className="size-4 text-green-500 shrink-0" />
-              ) : (
-                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
-              )}
-              <span
-                className={
-                  step.status === 'done'
-                    ? 'text-muted-foreground line-through'
-                    : 'text-foreground font-medium'
-                }
-              >
-                {label}
-              </span>
-            </div>
-            )
-          })}
-          {visibleCurrentAgent &&
-            !visibleSteps.some((s) => s.agent === visibleCurrentAgent && s.status === 'running') && (
-            <div className="flex items-center gap-2 text-sm">
-              <Loader2 className="size-4 animate-spin text-primary shrink-0" />
-              <span className="text-foreground font-medium">
-                {getAgentLabel(visibleCurrentAgent, t)}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
+      {hasLiveSteps && steps ? (
+        <AgentStepList
+          steps={steps}
+          currentAgent={currentAgent ?? null}
+          className="mx-auto w-full max-w-sm"
+        />
+      ) : null}
     </div>
   )
 }

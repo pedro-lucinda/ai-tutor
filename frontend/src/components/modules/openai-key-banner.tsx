@@ -1,16 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
-import { getOpenAIKeyStatus } from '@/api/settings'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useOpenAIKeyStatus } from '@/hooks/use-settings'
 
 export function OpenAIKeyBanner() {
   const { t } = useTranslation()
-  const { data: status } = useQuery({
-    queryKey: ['settings', 'openai'],
-    queryFn: getOpenAIKeyStatus,
-  })
+  const { data: status } = useOpenAIKeyStatus()
 
   if (!status || status.configured) {
     return null

@@ -15,7 +15,6 @@ from app.limiter import limiter
 
 from app.routes.courses import courses_router
 from app.routes.me import me_router
-from app.routes.progress import progress_router
 from app.routes.settings import settings_router
 
 logger = logging.getLogger("ai_tutor")
@@ -62,7 +61,6 @@ async def request_logging_middleware(request: Request, call_next):
 app.include_router(me_router)
 app.include_router(settings_router)
 app.include_router(courses_router)
-app.include_router(progress_router)
 
 
 @app.get("/")

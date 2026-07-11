@@ -4,28 +4,35 @@ Curriculum validation runs during course creation; on-demand lessons generate di
 """
 
 import json
+from dataclasses import dataclass
 from typing import AsyncIterator
 
 from langchain_core.messages import HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.ai_tutor.orchestrator import run_course_creation, run_course_creation_stream
+from app.agents.ai_tutor.agents.course_creation import run_course_creation_stream
+from app.agents.ai_tutor.client_factory import ai_client_factory
+from app.agents.ai_tutor.language import language_instruction
 from app.agents.ai_tutor.schemas.lesson import LessonContent
 from app.agents.ai_tutor.schemas.quiz import FinalTestOutput, QuizOutput
 from app.agents.ai_tutor.streaming import format_sse, stream_agent
+from app.constants import QuizType
 from app.db import repository as repo
-from app.db.models import Course, Lesson, Quiz, Subtopic
-from app.services.ai_client_factory import ai_client_factory
-
-LANGUAGE_NAMES: dict[str, str] = {
-    "en": "English",
-    "pt-BR": "Portuguese (Brazil)",
-}
+from app.db.models import Subtopic
+from app.serializers.course import serialize_course_created
 
 
-def _language_instruction(lang: str) -> str:
-    name = LANGUAGE_NAMES.get(lang, "English")
-    return f"\n\nIMPORTANT: Write ALL output in {name}. Every sentence, explanation, and example must be in {name}."
+@dataclass(frozen=True)
+class CachedContent:
+    data: dict
+
+
+@dataclass(frozen=True)
+class GeneratedStream:
+    iterator: AsyncIterator[str]
+
+
+ContentResult = CachedContent | GeneratedStream
 
 
 def _build_lesson_prompt(subtopic: Subtopic, course_level: str, lang: str) -> str:
@@ -34,150 +41,13 @@ def _build_lesson_prompt(subtopic: Subtopic, course_level: str, lang: str) -> st
             f"Subtopic: '{subtopic.name}'\n"
             f"Level: {course_level}\n\n"
             f"Generation instructions:\n{subtopic.lesson_prompt}\n"
-            f"{_language_instruction(lang)}"
+            f"{language_instruction(lang)}"
         )
     return (
         f"Generate a complete lesson for subtopic '{subtopic.name}' "
         f"at {course_level} level."
-        f"{_language_instruction(lang)}"
+        f"{language_instruction(lang)}"
     )
-
-
-def _extract_structured(result: dict):
-    return result.get("structured_response")
-
-
-# ---------------------------------------------------------------------------
-# Course creation
-# ---------------------------------------------------------------------------
-
-
-async def create_course(
-    db: AsyncSession,
-    user_id: int,
-    user_goal: str,
-    lang: str = "en",
-) -> Course:
-    """Run the full pipeline (plan → research → build) and persist the result."""
-    api_key = await ai_client_factory.require_openai_key(db, user_id)
-    output = await run_course_creation(user_goal, api_key=api_key, lang=lang)
-
-    course = await repo.create_course(db, output.plan, language=lang, user_id=user_id)
-    await repo.persist_blueprint(db, course.id, output.blueprint)
-    await repo.set_course_ready(db, course.id)
-    await db.commit()
-
-    return await repo.get_course(db, course.id)
-
-
-# ---------------------------------------------------------------------------
-# On-demand lesson generation
-# ---------------------------------------------------------------------------
-
-
-async def get_or_generate_lesson(
-    db: AsyncSession,
-    user_id: int,
-    subtopic: Subtopic,
-    course_level: str,
-    lang: str = "en",
-) -> Lesson:
-    """Return cached lesson or generate via the content generator, then cache it."""
-    existing = await repo.get_lesson(db, subtopic.id)
-    if existing:
-        return existing
-
-    api_key = await ai_client_factory.require_openai_key(db, user_id)
-    agent = ai_client_factory.make_lesson_agent(api_key)
-    prompt = _build_lesson_prompt(subtopic, course_level, lang)
-    result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-    lesson: LessonContent = _extract_structured(result)
-
-    db_lesson = await repo.save_lesson(db, subtopic.id, lesson, validated=True)
-    await db.commit()
-    return db_lesson
-
-
-# ---------------------------------------------------------------------------
-# On-demand quiz generation
-# ---------------------------------------------------------------------------
-
-
-async def get_or_generate_quiz(
-    db: AsyncSession,
-    user_id: int,
-    subtopic: Subtopic,
-    course_level: str,
-    lesson_json: str | None = None,
-    lang: str = "en",
-) -> Quiz:
-    """Return cached subtopic quiz or generate via the quiz supervisor, then cache it."""
-    existing = await repo.get_quiz(db, subtopic.id, "subtopic")
-    if existing:
-        return existing
-
-    api_key = await ai_client_factory.require_openai_key(db, user_id)
-    agent = ai_client_factory.make_quiz_agent(api_key)
-    lesson_context = f"\n\nLesson content:\n{lesson_json}" if lesson_json else ""
-    prompt = (
-        f"Generate exactly 3 multiple-choice quiz questions for the subtopic "
-        f"'{subtopic.name}' at {course_level} level.{lesson_context}"
-        f"{_language_instruction(lang)}"
-    )
-    result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-    quiz: QuizOutput = _extract_structured(result)
-
-    db_quiz = await repo.save_quiz(db, subtopic.id, quiz, validated=True)
-    await db.commit()
-    return db_quiz
-
-
-# ---------------------------------------------------------------------------
-# Final test generation
-# ---------------------------------------------------------------------------
-
-
-async def generate_final_test(
-    db: AsyncSession,
-    user_id: int,
-    module_id: int,
-    course_level: str,
-    module_name: str,
-    subtopics: list[Subtopic],
-    weak_topic_names: list[str],
-    lang: str = "en",
-) -> Quiz:
-    """Generate a final test for a module (~10 questions, first subtopic as anchor row)."""
-    if not subtopics:
-        raise ValueError("No subtopics to generate final test for.")
-
-    api_key = await ai_client_factory.require_openai_key(db, user_id)
-    agent = ai_client_factory.make_final_test_agent(api_key)
-
-    subtopic_names = [s.name for s in subtopics]
-    weak_note = (
-        f"Weak topics (score extra weight): {weak_topic_names}" if weak_topic_names else ""
-    )
-    prompt = (
-        f"Generate a final test for the '{module_name}' module at {course_level} level.\n"
-        f"Subtopics covered: {subtopic_names}.\n"
-        f"{weak_note}"
-        f"{_language_instruction(lang)}"
-    )
-    result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-    final_test: FinalTestOutput = _extract_structured(result)
-
-    anchor_subtopic = subtopics[0]
-    db_quiz = await repo.save_final_quiz(
-        db, anchor_subtopic.id, final_test.model_dump_json()
-    )
-    await db.commit()
-    return db_quiz
-
-
-# ---------------------------------------------------------------------------
-# Streaming variants
-# ---------------------------------------------------------------------------
 
 
 async def create_course_stream(
@@ -186,14 +56,12 @@ async def create_course_stream(
     user_goal: str,
     lang: str = "en",
 ) -> AsyncIterator[str]:
-    """Streaming variant of create_course — yields SSE lines.
-
-    Progress events are yielded as they come in; the final event is
-    `complete` with the course JSON payload.
-    """
+    """Run the course-creation pipeline and yield SSE lines."""
     api_key = await ai_client_factory.require_openai_key(db, user_id)
     output = None
-    async for sse_line, result in run_course_creation_stream(user_goal, api_key=api_key, lang=lang):
+    async for sse_line, result in run_course_creation_stream(
+        user_goal, api_key=api_key, lang=lang
+    ):
         if result is not None:
             output = result
         else:
@@ -203,58 +71,41 @@ async def create_course_stream(
         yield format_sse({"type": "error", "message": "Agent produced no output"})
         return
 
-    course = await repo.create_course(db, output.plan, language=lang, user_id=user_id)
-    await repo.persist_blueprint(db, course.id, output.blueprint)
+    course = await repo.create_course(
+        db,
+        topic=output.plan.topic,
+        level=output.plan.level,
+        goal=output.plan.goal,
+        estimated_hours=output.plan.estimated_hours,
+        language=lang,
+        user_id=user_id,
+    )
+    await repo.persist_blueprint(db, course.id, output.blueprint.model_dump_json())
     await repo.set_course_ready(db, course.id)
     await db.commit()
 
     full_course = await repo.get_course(db, course.id)
-    payload = {
-        "id": full_course.id,
-        "topic": full_course.topic,
-        "goal": full_course.goal,
-        "level": full_course.level,
-        "language": full_course.language,
-        "status": full_course.status,
-        "modules": [
-            {
-                "id": m.id,
-                "name": m.name,
-                "order": m.order,
-                "subtopics": [
-                    {"id": s.id, "name": s.name, "order": s.order}
-                    for s in m.subtopics
-                ],
-            }
-            for m in full_course.modules
-        ],
-    }
-    yield format_sse({"type": "complete", "data": payload})
+    yield format_sse(
+        {"type": "complete", "data": serialize_course_created(full_course)}
+    )
 
 
-async def get_or_generate_lesson_stream(
+async def _generate_lesson_stream(
     db: AsyncSession,
     user_id: int,
     subtopic: Subtopic,
     course_level: str,
     lang: str = "en",
 ) -> AsyncIterator[str]:
-    """Streaming variant — yields SSE progress lines then a complete event.
-
-    If the lesson is cached, yields a single `complete` event immediately.
-    """
-    existing = await repo.get_lesson(db, subtopic.id)
-    if existing:
-        yield format_sse({"type": "complete", "data": json.loads(existing.content_json)})
-        return
-
     api_key = await ai_client_factory.require_openai_key(db, user_id)
     agent = ai_client_factory.make_lesson_agent(api_key)
     prompt = _build_lesson_prompt(subtopic, course_level, lang)
     agent_input = {"messages": [HumanMessage(content=prompt)]}
     lesson_content: LessonContent | None = None
 
-    async for sse_line, result in stream_agent(agent, agent_input, partial_tool_name="LessonContent"):
+    async for sse_line, result in stream_agent(
+        agent, agent_input, partial_tool_name="LessonContent"
+    ):
         if result is not None:
             lesson_content = result
         else:
@@ -264,12 +115,14 @@ async def get_or_generate_lesson_stream(
         yield format_sse({"type": "error", "message": "Lesson agent produced no output"})
         return
 
-    db_lesson = await repo.save_lesson(db, subtopic.id, lesson_content, validated=True)
+    db_lesson = await repo.save_lesson(
+        db, subtopic.id, lesson_content.model_dump_json(), validated=True
+    )
     await db.commit()
     yield format_sse({"type": "complete", "data": json.loads(db_lesson.content_json)})
 
 
-async def get_or_generate_quiz_stream(
+async def _generate_quiz_stream(
     db: AsyncSession,
     user_id: int,
     subtopic: Subtopic,
@@ -277,19 +130,13 @@ async def get_or_generate_quiz_stream(
     lesson_json: str | None = None,
     lang: str = "en",
 ) -> AsyncIterator[str]:
-    """Streaming variant of get_or_generate_quiz."""
-    existing = await repo.get_quiz(db, subtopic.id, "subtopic")
-    if existing:
-        yield format_sse({"type": "complete", "data": json.loads(existing.questions_json)})
-        return
-
     api_key = await ai_client_factory.require_openai_key(db, user_id)
     agent = ai_client_factory.make_quiz_agent(api_key)
     lesson_context = f"\n\nLesson content:\n{lesson_json}" if lesson_json else ""
     prompt = (
         f"Generate exactly 3 multiple-choice quiz questions for the subtopic "
         f"'{subtopic.name}' at {course_level} level.{lesson_context}"
-        f"{_language_instruction(lang)}"
+        f"{language_instruction(lang)}"
     )
     agent_input = {"messages": [HumanMessage(content=prompt)]}
     quiz_content: QuizOutput | None = None
@@ -304,22 +151,22 @@ async def get_or_generate_quiz_stream(
         yield format_sse({"type": "error", "message": "Quiz agent produced no output"})
         return
 
-    db_quiz = await repo.save_quiz(db, subtopic.id, quiz_content, validated=True)
+    db_quiz = await repo.save_quiz(
+        db, subtopic.id, quiz_content.model_dump_json(), validated=True
+    )
     await db.commit()
     yield format_sse({"type": "complete", "data": json.loads(db_quiz.questions_json)})
 
 
-async def generate_final_test_stream(
+async def _generate_final_test_stream(
     db: AsyncSession,
     user_id: int,
-    module_id: int,
     course_level: str,
     module_name: str,
     subtopics: list[Subtopic],
     weak_topic_names: list[str],
     lang: str = "en",
 ) -> AsyncIterator[str]:
-    """Streaming variant of generate_final_test."""
     if not subtopics:
         yield format_sse({"type": "error", "message": "No subtopics to generate final test for."})
         return
@@ -334,7 +181,7 @@ async def generate_final_test_stream(
         f"Generate a final test for the '{module_name}' module at {course_level} level.\n"
         f"Subtopics covered: {subtopic_names}.\n"
         f"{weak_note}"
-        f"{_language_instruction(lang)}"
+        f"{language_instruction(lang)}"
     )
     agent_input = {"messages": [HumanMessage(content=prompt)]}
     final_test_content: FinalTestOutput | None = None
@@ -355,3 +202,71 @@ async def generate_final_test_stream(
     )
     await db.commit()
     yield format_sse({"type": "complete", "data": json.loads(db_quiz.questions_json)})
+
+
+async def resolve_lesson(
+    db: AsyncSession,
+    user_id: int,
+    subtopic: Subtopic,
+    course_level: str,
+    lang: str = "en",
+) -> ContentResult:
+    existing = await repo.get_lesson(db, subtopic.id)
+    if existing:
+        return CachedContent(data=json.loads(existing.content_json))
+    return GeneratedStream(
+        iterator=_generate_lesson_stream(db, user_id, subtopic, course_level, lang)
+    )
+
+
+async def resolve_quiz(
+    db: AsyncSession,
+    user_id: int,
+    subtopic: Subtopic,
+    course_level: str,
+    lang: str = "en",
+) -> ContentResult:
+    existing = await repo.get_quiz(db, subtopic.id, QuizType.SUBTOPIC)
+    if existing:
+        return CachedContent(data=json.loads(existing.questions_json))
+
+    lesson = await repo.get_lesson(db, subtopic.id)
+    lesson_json = lesson.content_json if lesson else None
+    return GeneratedStream(
+        iterator=_generate_quiz_stream(
+            db, user_id, subtopic, course_level, lesson_json, lang
+        )
+    )
+
+
+async def resolve_final_test(
+    db: AsyncSession,
+    user_id: int,
+    course_id: int,
+    course_level: str,
+    module_name: str,
+    subtopics: list[Subtopic],
+    lang: str = "en",
+) -> ContentResult:
+    if subtopics:
+        existing = await repo.get_quiz(db, subtopics[0].id, QuizType.FINAL)
+        if existing:
+            return CachedContent(data=json.loads(existing.questions_json))
+
+    progress_records = await repo.get_course_progress(db, course_id)
+    weak_names = [
+        record.subtopic.name
+        for record in progress_records
+        if record.subtopic and record.quiz_score is not None and record.quiz_score < 0.70
+    ]
+    return GeneratedStream(
+        iterator=_generate_final_test_stream(
+            db,
+            user_id,
+            course_level,
+            module_name,
+            subtopics,
+            weak_names,
+            lang,
+        )
+    )

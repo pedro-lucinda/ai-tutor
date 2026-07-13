@@ -25,8 +25,7 @@ app = FastAPI(title="AI Tutor API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Comma-separated list of allowed frontend origins, e.g.
-# CORS_ORIGINS="https://my-frontend.onrender.com,http://localhost:5173"
+
 _cors_origins = [
     origin.strip()
     for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
